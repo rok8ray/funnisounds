@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Physics Sandbox: Level Up</title>
+    <title>Physics Sandbox: Level System</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
         #crosshair {
@@ -17,14 +17,22 @@
             position: absolute;
             top: 20px; left: 20px;
             color: white; background: rgba(0, 0, 0, 0.8);
-            padding: 20px; border-radius: 12px; border: 1px solid #444;
-            pointer-events: none;
+            padding: 15px; border-radius: 10px; border: 1px solid #444;
+            pointer-events: none; font-size: 14px;
         }
         #level-display {
             position: absolute;
             top: 20px; right: 20px;
             color: #00ff88; font-size: 2em; font-weight: bold;
-            background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 10px;
+            background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 10px;
+        }
+        #msg {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00ff88; font-size: 4em; font-weight: bold;
+            display: none; text-shadow: 0 0 20px #000;
+            pointer-events: none;
         }
         .key { color: #00ff88; font-weight: bold; }
     </style>
@@ -32,6 +40,7 @@
 <body>
     <div id="crosshair"></div>
     <div id="level-display">Level: 1</div>
+    <div id="msg">LEVEL COMPLETE!</div>
     <div id="ui">
         <strong>CONTROLS:</strong><br>
         <span class="key">WASD</span> Fly | <span class="key">SPACE/SHIFT</span> Up/Down<br>
@@ -55,8 +64,9 @@
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import * as CANNON from 'cannon-es';
 
-        // --- CONFIG ---
+        // --- GAME STATE ---
         let currentLevel = 1;
+        let isSpawning = false;
         const MODEL_URLS = ['obama_prism.glb'];
         const physicsObjects = [];
         
@@ -70,7 +80,7 @@
         scene.fog = new THREE.Fog(0x050505, 0, 100);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 5, 25);
+        camera.position.set(0, 5, 30);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -85,7 +95,7 @@
         
         document.addEventListener('click', () => {
             if (!controls.isLocked) controls.lock();
-            else shoot();
+            else if (!isSpawning) shoot();
         });
 
         const onKey = (val) => (e) => {
@@ -120,19 +130,27 @@
 
         // --- LEVEL LOGIC ---
         function spawnWall(level) {
-            const rows = 5 + level; // Gets taller each level
-            const cols = 6 + level; // Gets wider each level
-            const gap = 1.8;
+            isSpawning = true;
+            const rows = 4 + level; 
+            const cols = 5 + level; 
+            const gap = 2.0;
+            const totalToLoad = rows * cols;
+            let loadedCount = 0;
 
             for(let x = -cols/2; x < cols/2; x++) {
                 for(let y = 0; y < rows; y++) {
-                    createObject(x * gap, y * gap + 1, -10);
+                    createObject(x * gap, y * gap + 1, -10, () => {
+                        loadedCount++;
+                        if(loadedCount >= totalToLoad) {
+                            isSpawning = false;
+                        }
+                    });
                 }
             }
             document.getElementById('level-display').innerText = `Level: ${level}`;
         }
 
-        function createObject(x, y, z) {
+        function createObject(x, y, z, onDone) {
             const size = 1.5;
             const body = new CANNON.Body({ 
                 mass: 1, 
@@ -143,30 +161,31 @@
             world.addBody(body);
 
             loader.load(MODEL_URLS[0], (gltf) => {
-                const model = gltf.scene;
+                const model = gltf.scene.clone(); 
                 model.scale.set(size, size, size);
                 model.traverse(n => { if(n.isMesh) n.castShadow = true; });
                 scene.add(model);
                 physicsObjects.push({ mesh: model, body: body, isTarget: true });
+                onDone();
             }, undefined, () => {
-                // Fallback Cube
                 const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshStandardMaterial({ color: 0x00ff88 }));
                 mesh.castShadow = true;
                 scene.add(mesh);
                 physicsObjects.push({ mesh, body, isTarget: true });
+                onDone();
             });
         }
 
         function shoot() {
-            const radius = 0.5;
-            const ballBody = new CANNON.Body({ mass: 15, shape: new CANNON.Sphere(radius) });
+            const radius = 0.6;
+            const ballBody = new CANNON.Body({ mass: 20, shape: new CANNON.Sphere(radius) });
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
             ballBody.position.set(camera.position.x + dir.x, camera.position.y + dir.y, camera.position.z + dir.z);
-            ballBody.velocity.set(dir.x * 70, dir.y * 70, dir.z * 70);
+            ballBody.velocity.set(dir.x * 80, dir.y * 80, dir.z * 80);
             world.addBody(ballBody);
 
-            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0xff4400, emissive: 0xff0000 }));
+            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0xff4400, emissive: 0xff0000, emissiveIntensity: 2 }));
             ballMesh.castShadow = true;
             scene.add(ballMesh);
             physicsObjects.push({ mesh: ballMesh, body: ballBody, isTarget: false });
@@ -188,35 +207,44 @@
                 if (moveState.up) camera.position.y += speed * delta;
                 if (moveState.down) camera.position.y -= speed * delta;
 
-                // --- GROUND CONSTRAINT ---
-                if (camera.position.y < 1.5) camera.position.y = 1.5;
+                // --- FLOOR LOCK ---
+                if (camera.position.y < 1.6) camera.position.y = 1.6;
             }
 
             world.fixedStep();
 
-            // Sync and Cleanup
             for (let i = physicsObjects.length - 1; i >= 0; i--) {
                 const obj = physicsObjects[i];
                 obj.mesh.position.copy(obj.body.position);
                 obj.mesh.quaternion.copy(obj.body.quaternion);
 
-                // If object falls off the world
-                if (obj.body.position.y < -5) {
+                // Cleanup objects that fall off
+                if (obj.body.position.y < -10) {
                     scene.remove(obj.mesh);
                     world.removeBody(obj.body);
                     physicsObjects.splice(i, 1);
                 }
             }
 
-            // Check if Level is Cleared (Only count targets)
+            // Check Win Condition
             const targetsLeft = physicsObjects.filter(o => o.isTarget).length;
-            if (targetsLeft === 0) {
-                currentLevel++;
-                spawnWall(currentLevel);
+            if (!isSpawning && targetsLeft === 0) {
+                isSpawning = true; // Lock immediately
+                showLevelMessage();
             }
 
             renderer.render(scene, camera);
             prevTime = time;
+        }
+
+        function showLevelMessage() {
+            const msg = document.getElementById('msg');
+            msg.style.display = 'block';
+            setTimeout(() => {
+                msg.style.display = 'none';
+                currentLevel++;
+                spawnWall(currentLevel);
+            }, 2000);
         }
 
         spawnWall(currentLevel);
