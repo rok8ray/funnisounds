@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Physics Sandbox: Pro Mode</title>
+    <title>Physics Sandbox: Targeted Hits</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
         #crosshair {
@@ -12,13 +12,6 @@
             width: 14px; height: 14px;
             border: 2px solid #00ff88; border-radius: 50%;
             transform: translate(-50%, -50%); pointer-events: none;
-        }
-        #ui {
-            position: absolute;
-            top: 20px; left: 20px;
-            color: white; background: rgba(0, 0, 0, 0.8);
-            padding: 15px; border-radius: 10px; border: 1px solid #444;
-            pointer-events: none; font-size: 14px;
         }
         #level-display {
             position: absolute;
@@ -34,19 +27,12 @@
             display: none; text-shadow: 0 0 20px #000;
             pointer-events: none; text-align: center;
         }
-        .key { color: #00ff88; font-weight: bold; }
     </style>
 </head>
 <body>
     <div id="crosshair"></div>
     <div id="level-display">Level: 1</div>
     <div id="msg">LEVEL COMPLETE!</div>
-    <div id="ui">
-        <strong>PRO PHYSICS MODE:</strong><br>
-        <span class="key">HIT</span> blocks to shrink them<br>
-        <span class="key">FLYING</span> blocks count as cleared<br>
-        <span class="key">WASD</span> to Fly
-    </div>
 
     <script type="importmap">
         {
@@ -64,83 +50,59 @@
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import * as CANNON from 'cannon-es';
 
-        // --- GAME STATE ---
         let currentLevel = 1;
         let isSpawning = false;
-        const MODEL_URLS = ['obama_prism.glb'];
         const physicsObjects = [];
-        
-        // --- PHYSICS ---
         const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
         world.allowSleep = true;
 
-        // --- SCENE ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
-        scene.fog = new THREE.Fog(0x050505, 0, 120);
-
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
         camera.position.set(0, 5, 30);
-
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
         const loader = new GLTFLoader();
-
-        // --- CONTROLS ---
         const controls = new PointerLockControls(camera, document.body);
         const moveState = { forward: false, backward: false, left: false, right: false, up: false, down: false };
-        
-        document.addEventListener('click', () => {
-            if (!controls.isLocked) controls.lock();
-            else if (!isSpawning) shoot();
+
+        document.addEventListener('click', () => { 
+            if (!controls.isLocked) controls.lock(); 
+            else if (!isSpawning) shoot(); 
         });
 
-        const onKey = (val) => (e) => {
-            if (e.code === 'KeyW') moveState.forward = val;
-            if (e.code === 'KeyS') moveState.backward = val;
-            if (e.code === 'KeyA') moveState.left = val;
-            if (e.code === 'KeyD') moveState.right = val;
-            if (e.code === 'Space') moveState.up = val;
-            if (e.code === 'ShiftLeft') moveState.down = val;
+        const onKey = (v) => (e) => {
+            if (e.code === 'KeyW') moveState.forward = v;
+            if (e.code === 'KeyS') moveState.backward = v;
+            if (e.code === 'KeyA') moveState.left = v;
+            if (e.code === 'KeyD') moveState.right = v;
+            if (e.code === 'Space') moveState.up = v;
+            if (e.code === 'ShiftLeft') moveState.down = v;
         };
         document.addEventListener('keydown', onKey(true));
         document.addEventListener('keyup', onKey(false));
 
-        // --- GROUND ---
+        // Ground
         const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
-        groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+        groundBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
         world.addBody(groundBody);
-
-        const groundMesh = new THREE.Mesh(
-            new THREE.PlaneGeometry(300, 300),
-            new THREE.MeshStandardMaterial({ color: 0x111111 })
-        );
-        groundMesh.rotation.x = -Math.PI / 2;
-        groundMesh.receiveShadow = true;
-        scene.add(groundMesh);
         scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-        const sun = new THREE.DirectionalLight(0xffffff, 1);
-        sun.position.set(10, 30, 10);
-        sun.castShadow = true;
-        scene.add(sun);
 
-        // --- LEVEL LOGIC ---
         function spawnWall(level) {
             isSpawning = true;
             const rows = 3 + level; 
             const cols = 4 + level; 
             const gap = 2.2;
-            const totalToLoad = rows * cols;
             let loadedCount = 0;
+            const total = rows * cols;
 
             for(let x = -cols/2; x < cols/2; x++) {
                 for(let y = 0; y < rows; y++) {
                     createObject(x * gap, y * gap + 1, -10, () => {
                         loadedCount++;
-                        if(loadedCount >= totalToLoad) isSpawning = false;
+                        if(loadedCount >= total) isSpawning = false;
                     });
                 }
             }
@@ -151,13 +113,17 @@
             const size = 1.5;
             const body = new CANNON.Body({ 
                 mass: 1, 
-                shape: new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2)),
-                allowSleep: true 
+                shape: new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2)) 
             });
             body.position.set(x, y, z);
             
+            // --- SELECTIVE COLLISION DETECTION ---
             body.addEventListener('collide', (e) => {
-                if ((e.contact.bj.isProjectile || e.contact.bi.isProjectile) && !body.hit) {
+                const contact = e.contact;
+                const other = contact.bi === body ? contact.bj : contact.bi;
+                
+                // Only trigger if hit by a projectile
+                if (other.isProjectile && !body.hit) {
                     body.hit = true;
                     body.shrinkStart = performance.now();
                 }
@@ -165,39 +131,32 @@
 
             world.addBody(body);
 
-            loader.load(MODEL_URLS[0], (gltf) => {
-                const model = gltf.scene.clone(); 
-                model.scale.set(size, size, size);
-                model.traverse(n => { if(n.isMesh) n.castShadow = true; });
-                scene.add(model);
-                physicsObjects.push({ mesh: model, body: body, isTarget: true, originalScale: size });
-                onDone();
-            }, undefined, () => {
-                const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshStandardMaterial({ color: 0x00ff88 }));
-                mesh.castShadow = true;
-                scene.add(mesh);
-                physicsObjects.push({ mesh, body, isTarget: true, originalScale: size });
-                onDone();
-            });
+            // Using standard Cube for stability, change to GLTFLoader if file is ready
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(size, size, size), 
+                new THREE.MeshStandardMaterial({ color: 0x00ff88 })
+            );
+            scene.add(mesh);
+            physicsObjects.push({ mesh, body, isTarget: true, originalScale: size });
+            onDone();
         }
 
         function shoot() {
             const radius = 0.5;
-            const ballBody = new CANNON.Body({ mass: 20, shape: new CANNON.Sphere(radius) });
-            ballBody.isProjectile = true; 
+            const ballBody = new CANNON.Body({ mass: 10, shape: new CANNON.Sphere(radius) });
+            ballBody.isProjectile = true; // IMPORTANT FLAG
             
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
             ballBody.position.set(camera.position.x + dir.x, camera.position.y + dir.y, camera.position.z + dir.z);
-            ballBody.velocity.set(dir.x * 110, dir.y * 110, dir.z * 110);
+            ballBody.velocity.set(dir.x * 100, dir.y * 100, dir.z * 100);
             world.addBody(ballBody);
 
-            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 2 }));
+            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0xffffff }));
             scene.add(ballMesh);
-            physicsObjects.push({ mesh: ballMesh, body: ballBody, isTarget: false, life: 3.0 });
+            physicsObjects.push({ mesh: ballMesh, body: ballBody, isTarget: false, life: 2.0 });
         }
 
-        // --- ANIMATION LOOP ---
         let prevTime = performance.now();
         function animate() {
             requestAnimationFrame(animate);
@@ -205,14 +164,13 @@
             const delta = (time - prevTime) / 1000;
 
             if (controls.isLocked) {
-                const speed = 25.0;
+                const speed = 20.0;
                 if (moveState.forward) controls.moveForward(speed * delta);
                 if (moveState.backward) controls.moveForward(-speed * delta);
                 if (moveState.left) controls.moveRight(-speed * delta);
                 if (moveState.right) controls.moveRight(speed * delta);
                 if (moveState.up) camera.position.y += speed * delta;
                 if (moveState.down) camera.position.y -= speed * delta;
-                if (camera.position.y < 1.6) camera.position.y = 1.6;
             }
 
             world.fixedStep();
@@ -222,22 +180,18 @@
                 obj.mesh.position.copy(obj.body.position);
                 obj.mesh.quaternion.copy(obj.body.quaternion);
 
-                // --- SHRINK LOGIC ---
+                // Shrink logic
                 if (obj.body.hit && obj.isTarget) {
                     const elapsed = (time - obj.body.shrinkStart) / 1000;
-                    const scale = Math.max(0, obj.originalScale * (1 - elapsed));
-                    obj.mesh.scale.set(scale, scale, scale);
-                    if (scale <= 0) obj.body.toDelete = true;
+                    const s = Math.max(0, obj.originalScale * (1 - elapsed));
+                    obj.mesh.scale.set(s, s, s);
+                    if (s <= 0) obj.body.toDelete = true;
                 }
 
-                // --- FLYING DETECTION ---
-                // If the object is moving really fast (velocity > 15), it's "flying away"
-                if (obj.isTarget && !obj.body.hit) {
-                    const vel = obj.body.velocity.length();
-                    if (vel > 15) {
-                        obj.body.hit = true; // Flag it as hit so it starts shrinking/deleting
-                        obj.body.shrinkStart = time;
-                    }
+                // Speed Check (Flying away counts as hit)
+                if (obj.isTarget && !obj.body.hit && obj.body.velocity.length() > 20) {
+                    body.hit = true;
+                    body.shrinkStart = time;
                 }
 
                 if (obj.life !== undefined) {
@@ -245,41 +199,31 @@
                     if (obj.life <= 0) obj.body.toDelete = true;
                 }
 
-                if (obj.body.toDelete || obj.body.position.y < -15) {
+                if (obj.body.toDelete || obj.body.position.y < -20) {
                     scene.remove(obj.mesh);
                     world.removeBody(obj.body);
                     physicsObjects.splice(i, 1);
                 }
             }
 
-            const targetsLeft = physicsObjects.filter(o => o.isTarget).length;
-            if (!isSpawning && targetsLeft === 0) {
+            const targets = physicsObjects.filter(o => o.isTarget).length;
+            if (!isSpawning && targets === 0) {
                 isSpawning = true;
-                showLevelMessage();
+                const msg = document.getElementById('msg');
+                msg.style.display = 'block';
+                setTimeout(() => {
+                    msg.style.display = 'none';
+                    currentLevel++;
+                    spawnWall(currentLevel);
+                }, 1000);
             }
 
             renderer.render(scene, camera);
             prevTime = time;
         }
 
-        function showLevelMessage() {
-            const msg = document.getElementById('msg');
-            msg.style.display = 'block';
-            setTimeout(() => {
-                msg.style.display = 'none';
-                currentLevel++;
-                spawnWall(currentLevel);
-            }, 1200);
-        }
-
         spawnWall(currentLevel);
         animate();
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>
