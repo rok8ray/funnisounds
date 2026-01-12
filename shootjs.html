@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Physics Sandbox: Hit to Delete</title>
+    <title>Physics Sandbox: Impact & Fade</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
         #crosshair {
@@ -42,10 +42,10 @@
     <div id="level-display">Level: 1</div>
     <div id="msg">LEVEL COMPLETE!</div>
     <div id="ui">
-        <strong>CONTROLS:</strong><br>
-        <span class="key">WASD</span> Fly | <span class="key">SPACE/SHIFT</span> Up/Down<br>
-        <span class="key">CLICK</span> Shoot/Start<br>
-        Shoot blocks to delete them!
+        <strong>PHYSICS MODE:</strong><br>
+        <span class="key">CLICK</span> to Blast Blocks<br>
+        Blocks delete 1 second after impact!<br>
+        <span class="key">WASD</span> to Fly
     </div>
 
     <script type="importmap">
@@ -157,11 +157,15 @@
             });
             body.position.set(x, y, z);
             
-            // --- HIT DETECTION LOGIC ---
+            // --- DELAYED DELETE ON HIT ---
             body.addEventListener('collide', (e) => {
-                // If hit by something marked as a projectile
-                if (e.contact.bj.isProjectile || e.contact.bi.isProjectile) {
-                    body.toDelete = true; 
+                // Check if hit by a projectile and not already scheduled for deletion
+                if ((e.contact.bj.isProjectile || e.contact.bi.isProjectile) && !body.hit) {
+                    body.hit = true;
+                    // Wait 1 second after impact before deleting
+                    setTimeout(() => {
+                        body.toDelete = true;
+                    }, 1000); 
                 }
             });
 
@@ -184,19 +188,20 @@
         }
 
         function shoot() {
-            const radius = 0.4;
-            const ballBody = new CANNON.Body({ mass: 5, shape: new CANNON.Sphere(radius) });
-            ballBody.isProjectile = true; // Mark as projectile
+            const radius = 0.5;
+            // Heavy mass makes the blocks fly further
+            const ballBody = new CANNON.Body({ mass: 15, shape: new CANNON.Sphere(radius) });
+            ballBody.isProjectile = true; 
             
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
             ballBody.position.set(camera.position.x + dir.x, camera.position.y + dir.y, camera.position.z + dir.z);
-            ballBody.velocity.set(dir.x * 100, dir.y * 100, dir.z * 100);
+            ballBody.velocity.set(dir.x * 90, dir.y * 90, dir.z * 90);
             world.addBody(ballBody);
 
-            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 2 }));
+            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xff4400, emissiveIntensity: 2 }));
             scene.add(ballMesh);
-            physicsObjects.push({ mesh: ballMesh, body: ballBody, isTarget: false, life: 2.0 });
+            physicsObjects.push({ mesh: ballMesh, body: ballBody, isTarget: false, life: 3.0 });
         }
 
         // --- ANIMATION LOOP ---
@@ -224,13 +229,13 @@
                 obj.mesh.position.copy(obj.body.position);
                 obj.mesh.quaternion.copy(obj.body.quaternion);
 
-                // Delete projectiles after 2 seconds to save memory
+                // Projectile cleanup
                 if (obj.life !== undefined) {
                     obj.life -= delta;
                     if (obj.life <= 0) obj.body.toDelete = true;
                 }
 
-                // Handle Removal (Hit by bullet or fell off or timed out)
+                // Object removal
                 if (obj.body.toDelete || obj.body.position.y < -10) {
                     scene.remove(obj.mesh);
                     world.removeBody(obj.body);
@@ -238,7 +243,6 @@
                 }
             }
 
-            // Check Win Condition
             const targetsLeft = physicsObjects.filter(o => o.isTarget).length;
             if (!isSpawning && targetsLeft === 0) {
                 isSpawning = true;
