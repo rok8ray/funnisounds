@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Physics Sandbox: Level System</title>
+    <title>Physics Sandbox: Hit to Delete</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
         #crosshair {
@@ -45,7 +45,7 @@
         <strong>CONTROLS:</strong><br>
         <span class="key">WASD</span> Fly | <span class="key">SPACE/SHIFT</span> Up/Down<br>
         <span class="key">CLICK</span> Shoot/Start<br>
-        Clear the blocks to Level Up!
+        Shoot blocks to delete them!
     </div>
 
     <script type="importmap">
@@ -131,9 +131,9 @@
         // --- LEVEL LOGIC ---
         function spawnWall(level) {
             isSpawning = true;
-            const rows = 4 + level; 
-            const cols = 5 + level; 
-            const gap = 2.0;
+            const rows = 3 + level; 
+            const cols = 4 + level; 
+            const gap = 2.2;
             const totalToLoad = rows * cols;
             let loadedCount = 0;
 
@@ -141,9 +141,7 @@
                 for(let y = 0; y < rows; y++) {
                     createObject(x * gap, y * gap + 1, -10, () => {
                         loadedCount++;
-                        if(loadedCount >= totalToLoad) {
-                            isSpawning = false;
-                        }
+                        if(loadedCount >= totalToLoad) isSpawning = false;
                     });
                 }
             }
@@ -158,6 +156,15 @@
                 allowSleep: true 
             });
             body.position.set(x, y, z);
+            
+            // --- HIT DETECTION LOGIC ---
+            body.addEventListener('collide', (e) => {
+                // If hit by something marked as a projectile
+                if (e.contact.bj.isProjectile || e.contact.bi.isProjectile) {
+                    body.toDelete = true; 
+                }
+            });
+
             world.addBody(body);
 
             loader.load(MODEL_URLS[0], (gltf) => {
@@ -177,18 +184,19 @@
         }
 
         function shoot() {
-            const radius = 0.6;
-            const ballBody = new CANNON.Body({ mass: 20, shape: new CANNON.Sphere(radius) });
+            const radius = 0.4;
+            const ballBody = new CANNON.Body({ mass: 5, shape: new CANNON.Sphere(radius) });
+            ballBody.isProjectile = true; // Mark as projectile
+            
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
             ballBody.position.set(camera.position.x + dir.x, camera.position.y + dir.y, camera.position.z + dir.z);
-            ballBody.velocity.set(dir.x * 80, dir.y * 80, dir.z * 80);
+            ballBody.velocity.set(dir.x * 100, dir.y * 100, dir.z * 100);
             world.addBody(ballBody);
 
-            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0xff4400, emissive: 0xff0000, emissiveIntensity: 2 }));
-            ballMesh.castShadow = true;
+            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 2 }));
             scene.add(ballMesh);
-            physicsObjects.push({ mesh: ballMesh, body: ballBody, isTarget: false });
+            physicsObjects.push({ mesh: ballMesh, body: ballBody, isTarget: false, life: 2.0 });
         }
 
         // --- ANIMATION LOOP ---
@@ -206,8 +214,6 @@
                 if (moveState.right) controls.moveRight(speed * delta);
                 if (moveState.up) camera.position.y += speed * delta;
                 if (moveState.down) camera.position.y -= speed * delta;
-
-                // --- FLOOR LOCK ---
                 if (camera.position.y < 1.6) camera.position.y = 1.6;
             }
 
@@ -218,8 +224,14 @@
                 obj.mesh.position.copy(obj.body.position);
                 obj.mesh.quaternion.copy(obj.body.quaternion);
 
-                // Cleanup objects that fall off
-                if (obj.body.position.y < -10) {
+                // Delete projectiles after 2 seconds to save memory
+                if (obj.life !== undefined) {
+                    obj.life -= delta;
+                    if (obj.life <= 0) obj.body.toDelete = true;
+                }
+
+                // Handle Removal (Hit by bullet or fell off or timed out)
+                if (obj.body.toDelete || obj.body.position.y < -10) {
                     scene.remove(obj.mesh);
                     world.removeBody(obj.body);
                     physicsObjects.splice(i, 1);
@@ -229,7 +241,7 @@
             // Check Win Condition
             const targetsLeft = physicsObjects.filter(o => o.isTarget).length;
             if (!isSpawning && targetsLeft === 0) {
-                isSpawning = true; // Lock immediately
+                isSpawning = true;
                 showLevelMessage();
             }
 
@@ -244,7 +256,7 @@
                 msg.style.display = 'none';
                 currentLevel++;
                 spawnWall(currentLevel);
-            }, 2000);
+            }, 1500);
         }
 
         spawnWall(currentLevel);
