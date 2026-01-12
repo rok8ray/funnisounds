@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Physics Sandbox: Targeted Hits</title>
+    <title>Obama Prism Sandbox</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
         #crosshair {
@@ -53,6 +53,8 @@
         let currentLevel = 1;
         let isSpawning = false;
         const physicsObjects = [];
+        const MODEL_URL = 'obama_prism.glb'; // Make sure this file is in your folder!
+        
         const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
         world.allowSleep = true;
 
@@ -64,10 +66,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const loader = new GLTFLoader();
-        const controls = new PointerLockControls(camera, document.body);
-        const moveState = { forward: false, backward: false, left: false, right: false, up: false, down: false };
-
         const tloader = new THREE.TextureLoader();
 
         tloader.load('https://th.bing.com/th/id/R.343cce3e2109fd465c0209a6cb1e01e5?rik=PxxMvPXZWNxgpA&riu=http%3a%2f%2f1.bp.blogspot.com%2f-515irK7ZyVA%2fUOkEWfSfaRI%2fAAAAAAAAA3k%2filB7zoK4gFc%2fs1600%2fObama%2bofficial%2bhd%2bwallpaper.jpg&ehk=nqBBruQ3wedRjmQDYwzNfXVhMfsTyubfqBqk%2bf93Z8g%3d&risl=&pid=ImgRaw&r=0', (texture) => {
@@ -75,7 +73,10 @@
               scene.background = texture;
         });
 
-        
+        const loader = new GLTFLoader();
+        const controls = new PointerLockControls(camera, document.body);
+        const moveState = { forward: false, backward: false, left: false, right: false, up: false, down: false };
+
         document.addEventListener('click', () => { 
             if (!controls.isLocked) controls.lock(); 
             else if (!isSpawning) shoot(); 
@@ -92,17 +93,21 @@
         document.addEventListener('keydown', onKey(true));
         document.addEventListener('keyup', onKey(false));
 
-        // Ground
+        // Lights & Ground
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        const sun = new THREE.DirectionalLight(0xffffff, 1);
+        sun.position.set(10, 20, 10);
+        scene.add(sun);
+
         const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
         groundBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
         world.addBody(groundBody);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
         function spawnWall(level) {
             isSpawning = true;
             const rows = 3 + level; 
             const cols = 4 + level; 
-            const gap = 2.2;
+            const gap = 2.5;
             let loadedCount = 0;
             const total = rows * cols;
 
@@ -118,19 +123,15 @@
         }
 
         function createObject(x, y, z, onDone) {
-            const size = 1.5;
+            const size = 1.8;
             const body = new CANNON.Body({ 
                 mass: 1, 
                 shape: new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2)) 
             });
             body.position.set(x, y, z);
             
-            // --- SELECTIVE COLLISION DETECTION ---
             body.addEventListener('collide', (e) => {
-                const contact = e.contact;
-                const other = contact.bi === body ? contact.bj : contact.bi;
-                
-                // Only trigger if hit by a projectile
+                const other = e.contact.bi === body ? e.contact.bj : e.contact.bi;
                 if (other.isProjectile && !body.hit) {
                     body.hit = true;
                     body.shrinkStart = performance.now();
@@ -139,20 +140,26 @@
 
             world.addBody(body);
 
-            // Using standard Cube for stability, change to GLTFLoader if file is ready
-            const mesh = new THREE.Mesh(
-                new THREE.BoxGeometry(size, size, size), 
-                new THREE.MeshStandardMaterial({ color: 0x00ff88 })
-            );
-            scene.add(mesh);
-            physicsObjects.push({ mesh, body, isTarget: true, originalScale: size });
-            onDone();
+            // --- LOAD THE PRISM MODEL ---
+            loader.load(MODEL_URL, (gltf) => {
+                const model = gltf.scene.clone();
+                model.scale.set(size, size, size);
+                scene.add(model);
+                physicsObjects.push({ mesh: model, body: body, isTarget: true, originalScale: size });
+                onDone();
+            }, undefined, (err) => {
+                // Fallback if model fails to load
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshStandardMaterial({ color: 0x00ff88 }));
+                scene.add(mesh);
+                physicsObjects.push({ mesh, body, isTarget: true, originalScale: size });
+                onDone();
+            });
         }
 
         function shoot() {
             const radius = 0.5;
-            const ballBody = new CANNON.Body({ mass: 10, shape: new CANNON.Sphere(radius) });
-            ballBody.isProjectile = true; // IMPORTANT FLAG
+            const ballBody = new CANNON.Body({ mass: 15, shape: new CANNON.Sphere(radius) });
+            ballBody.isProjectile = true; 
             
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
@@ -160,7 +167,7 @@
             ballBody.velocity.set(dir.x * 100, dir.y * 100, dir.z * 100);
             world.addBody(ballBody);
 
-            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff }));
             scene.add(ballMesh);
             physicsObjects.push({ mesh: ballMesh, body: ballBody, isTarget: false, life: 2.0 });
         }
@@ -172,13 +179,14 @@
             const delta = (time - prevTime) / 1000;
 
             if (controls.isLocked) {
-                const speed = 20.0;
+                const speed = 25.0;
                 if (moveState.forward) controls.moveForward(speed * delta);
                 if (moveState.backward) controls.moveForward(-speed * delta);
                 if (moveState.left) controls.moveRight(-speed * delta);
                 if (moveState.right) controls.moveRight(speed * delta);
                 if (moveState.up) camera.position.y += speed * delta;
                 if (moveState.down) camera.position.y -= speed * delta;
+                if (camera.position.y < 1.6) camera.position.y = 1.6;
             }
 
             world.fixedStep();
@@ -188,7 +196,6 @@
                 obj.mesh.position.copy(obj.body.position);
                 obj.mesh.quaternion.copy(obj.body.quaternion);
 
-                // Shrink logic
                 if (obj.body.hit && obj.isTarget) {
                     const elapsed = (time - obj.body.shrinkStart) / 1000;
                     const s = Math.max(0, obj.originalScale * (1 - elapsed));
@@ -196,10 +203,10 @@
                     if (s <= 0) obj.body.toDelete = true;
                 }
 
-                // Speed Check (Flying away counts as hit)
-                if (obj.isTarget && !obj.body.hit && obj.body.velocity.length() > 20) {
-                    body.hit = true;
-                    body.shrinkStart = time;
+                // If it goes flying away, count it as hit
+                if (obj.isTarget && !obj.body.hit && obj.body.velocity.length() > 25) {
+                    obj.body.hit = true;
+                    obj.body.shrinkStart = time;
                 }
 
                 if (obj.life !== undefined) {
@@ -217,13 +224,12 @@
             const targets = physicsObjects.filter(o => o.isTarget).length;
             if (!isSpawning && targets === 0) {
                 isSpawning = true;
-                const msg = document.getElementById('msg');
-                msg.style.display = 'block';
+                document.getElementById('msg').style.display = 'block';
                 setTimeout(() => {
-                    msg.style.display = 'none';
+                    document.getElementById('msg').style.display = 'none';
                     currentLevel++;
                     spawnWall(currentLevel);
-                }, 1000);
+                }, 1200);
             }
 
             renderer.render(scene, camera);
