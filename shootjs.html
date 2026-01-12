@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Physics Sandbox: Impact & Fade</title>
+    <title>Physics Sandbox: Pro Mode</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
         #crosshair {
             position: absolute;
             top: 50%; left: 50%;
             width: 14px; height: 14px;
-            border: 2px solid white; border-radius: 50%;
+            border: 2px solid #00ff88; border-radius: 50%;
             transform: translate(-50%, -50%); pointer-events: none;
         }
         #ui {
@@ -32,7 +32,7 @@
             transform: translate(-50%, -50%);
             color: #00ff88; font-size: 4em; font-weight: bold;
             display: none; text-shadow: 0 0 20px #000;
-            pointer-events: none;
+            pointer-events: none; text-align: center;
         }
         .key { color: #00ff88; font-weight: bold; }
     </style>
@@ -42,9 +42,9 @@
     <div id="level-display">Level: 1</div>
     <div id="msg">LEVEL COMPLETE!</div>
     <div id="ui">
-        <strong>PHYSICS MODE:</strong><br>
-        <span class="key">CLICK</span> to Blast Blocks<br>
-        Blocks delete 1 second after impact!<br>
+        <strong>PRO PHYSICS MODE:</strong><br>
+        <span class="key">HIT</span> blocks to shrink them<br>
+        <span class="key">FLYING</span> blocks count as cleared<br>
         <span class="key">WASD</span> to Fly
     </div>
 
@@ -77,7 +77,7 @@
         // --- SCENE ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
-        scene.fog = new THREE.Fog(0x050505, 0, 100);
+        scene.fog = new THREE.Fog(0x050505, 0, 120);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
         camera.position.set(0, 5, 30);
@@ -109,24 +109,23 @@
         document.addEventListener('keydown', onKey(true));
         document.addEventListener('keyup', onKey(false));
 
-        // --- LIGHTS & GROUND ---
-        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-        sun.position.set(10, 30, 10);
-        sun.castShadow = true;
-        scene.add(sun);
-
+        // --- GROUND ---
         const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
         groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
         world.addBody(groundBody);
 
         const groundMesh = new THREE.Mesh(
-            new THREE.PlaneGeometry(200, 200),
-            new THREE.MeshStandardMaterial({ color: 0x151515 })
+            new THREE.PlaneGeometry(300, 300),
+            new THREE.MeshStandardMaterial({ color: 0x111111 })
         );
         groundMesh.rotation.x = -Math.PI / 2;
         groundMesh.receiveShadow = true;
         scene.add(groundMesh);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const sun = new THREE.DirectionalLight(0xffffff, 1);
+        sun.position.set(10, 30, 10);
+        sun.castShadow = true;
+        scene.add(sun);
 
         // --- LEVEL LOGIC ---
         function spawnWall(level) {
@@ -157,15 +156,10 @@
             });
             body.position.set(x, y, z);
             
-            // --- DELAYED DELETE ON HIT ---
             body.addEventListener('collide', (e) => {
-                // Check if hit by a projectile and not already scheduled for deletion
                 if ((e.contact.bj.isProjectile || e.contact.bi.isProjectile) && !body.hit) {
                     body.hit = true;
-                    // Wait 1 second after impact before deleting
-                    setTimeout(() => {
-                        body.toDelete = true;
-                    }, 1000); 
+                    body.shrinkStart = performance.now();
                 }
             });
 
@@ -176,30 +170,29 @@
                 model.scale.set(size, size, size);
                 model.traverse(n => { if(n.isMesh) n.castShadow = true; });
                 scene.add(model);
-                physicsObjects.push({ mesh: model, body: body, isTarget: true });
+                physicsObjects.push({ mesh: model, body: body, isTarget: true, originalScale: size });
                 onDone();
             }, undefined, () => {
                 const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshStandardMaterial({ color: 0x00ff88 }));
                 mesh.castShadow = true;
                 scene.add(mesh);
-                physicsObjects.push({ mesh, body, isTarget: true });
+                physicsObjects.push({ mesh, body, isTarget: true, originalScale: size });
                 onDone();
             });
         }
 
         function shoot() {
             const radius = 0.5;
-            // Heavy mass makes the blocks fly further
-            const ballBody = new CANNON.Body({ mass: 15, shape: new CANNON.Sphere(radius) });
+            const ballBody = new CANNON.Body({ mass: 20, shape: new CANNON.Sphere(radius) });
             ballBody.isProjectile = true; 
             
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
             ballBody.position.set(camera.position.x + dir.x, camera.position.y + dir.y, camera.position.z + dir.z);
-            ballBody.velocity.set(dir.x * 90, dir.y * 90, dir.z * 90);
+            ballBody.velocity.set(dir.x * 110, dir.y * 110, dir.z * 110);
             world.addBody(ballBody);
 
-            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xff4400, emissiveIntensity: 2 }));
+            const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 2 }));
             scene.add(ballMesh);
             physicsObjects.push({ mesh: ballMesh, body: ballBody, isTarget: false, life: 3.0 });
         }
@@ -229,14 +222,30 @@
                 obj.mesh.position.copy(obj.body.position);
                 obj.mesh.quaternion.copy(obj.body.quaternion);
 
-                // Projectile cleanup
+                // --- SHRINK LOGIC ---
+                if (obj.body.hit && obj.isTarget) {
+                    const elapsed = (time - obj.body.shrinkStart) / 1000;
+                    const scale = Math.max(0, obj.originalScale * (1 - elapsed));
+                    obj.mesh.scale.set(scale, scale, scale);
+                    if (scale <= 0) obj.body.toDelete = true;
+                }
+
+                // --- FLYING DETECTION ---
+                // If the object is moving really fast (velocity > 15), it's "flying away"
+                if (obj.isTarget && !obj.body.hit) {
+                    const vel = obj.body.velocity.length();
+                    if (vel > 15) {
+                        obj.body.hit = true; // Flag it as hit so it starts shrinking/deleting
+                        obj.body.shrinkStart = time;
+                    }
+                }
+
                 if (obj.life !== undefined) {
                     obj.life -= delta;
                     if (obj.life <= 0) obj.body.toDelete = true;
                 }
 
-                // Object removal
-                if (obj.body.toDelete || obj.body.position.y < -10) {
+                if (obj.body.toDelete || obj.body.position.y < -15) {
                     scene.remove(obj.mesh);
                     world.removeBody(obj.body);
                     physicsObjects.splice(i, 1);
@@ -260,7 +269,7 @@
                 msg.style.display = 'none';
                 currentLevel++;
                 spawnWall(currentLevel);
-            }, 1500);
+            }, 1200);
         }
 
         spawnWall(currentLevel);
