@@ -201,6 +201,16 @@ function addFallbackCube(body, size) {
     scene.add(mesh);
     physicsObjects.push({ mesh, body });
 }
+
+// ==========================================
+// 6.5 GENERATE THE WALL
+// ==========================================
+const gap = 1.8; // Increased slightly to prevent models overlapping
+for(let x = -8; x < 8; x++) {
+    for(let y = 0; y < 12; y++) {
+        createObject(x * gap, y * gap + 1, -5);
+    }
+}
         // ==========================================
         // 7. SHOOTING
         // ==========================================
