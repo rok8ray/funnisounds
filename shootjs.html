@@ -62,8 +62,12 @@
         // ==========================================
         // 1. CONFIGURATION & MODELS
         // ==========================================
-        const USE_CUSTOM_MODEL = true; // Set to TRUE once you have a model file
-        const MODEL_PATH = 'obama_prism.glb'; 
+        const USE_MODELS = true; // Set to true to attempt loading
+        const MODEL_URLS = [
+            'square_trump.glb',
+            'obama_prism.glb',
+            'nol.glb'
+        ];
         
         // ==========================================
         // 2. PHYSICS SETUP
@@ -139,54 +143,64 @@
         groundMesh.receiveShadow = true;
         scene.add(groundMesh);
 
-        // ==========================================
-        // 6. OBJECT CREATION
-        // ==========================================
-        const physicsObjects = [];
+// ==========================================
+// 6. OBJECT CREATION (With Random Model Support)
+// ==========================================
+const physicsObjects = [];
 
-        function createObject(x, y, z) {
-            const size = 1.5;
-            const halfSize = size / 2;
+function createObject(x, y, z) {
+    const size = 1.5;
+    const halfSize = size / 2;
 
-            // Physics Body (The Hitbox)
-            const body = new CANNON.Body({ 
-                mass: 1, 
-                shape: new CANNON.Box(new CANNON.Vec3(halfSize, halfSize, halfSize)),
-                allowSleep: true
-            });
-            body.position.set(x, y, z);
-            world.addBody(body);
+    // 1. Setup Physics Body (Always the same size for the wall)
+    const body = new CANNON.Body({ 
+        mass: 1, 
+        shape: new CANNON.Box(new CANNON.Vec3(halfSize, halfSize, halfSize)),
+        allowSleep: true
+    });
+    body.position.set(x, y, z);
+    world.addBody(body);
 
-            if (USE_CUSTOM_MODEL) {
-                // Future Model Placement
-                loader.load(MODEL_PATH, (gltf) => {
-                    const model = gltf.scene;
-                    model.scale.set(size, size, size);
-                    model.traverse(n => { if(n.isMesh) n.castShadow = true; });
-                    scene.add(model);
-                    physicsObjects.push({ mesh: model, body: body });
-                });
-            } else {
-                // Fallback Cube
-                const mesh = new THREE.Mesh(
-                    new THREE.BoxGeometry(size, size, size),
-                    new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(Math.random(), 0.7, 0.5) })
-                );
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
-                scene.add(mesh);
-                physicsObjects.push({ mesh, body });
+    // 2. Visual Logic
+    if (USE_MODELS) {
+        // Pick a random URL from the list
+        const randomURL = MODEL_URLS[Math.floor(Math.random() * MODEL_URLS.length)];
+
+        loader.load(
+            randomURL, 
+            (gltf) => {
+                // SUCCESS: Add the model
+                const model = gltf.scene;
+                model.scale.set(size, size, size);
+                model.traverse(n => { if(n.isMesh) n.castShadow = true; });
+                scene.add(model);
+                physicsObjects.push({ mesh: model, body: body });
+            },
+            undefined, // Progress function (optional)
+            (error) => {
+                // ERROR: Fallback to cube if file is missing
+                console.warn("Model not found, using fallback cube.");
+                addFallbackCube(body, size);
             }
-        }
+        );
+    } else {
+        addFallbackCube(body, size);
+    }
+}
 
-        // Generate Wall with spacing to prevent "exploding"
-        const gap = 1.6; 
-        for(let x = -8; x < 8; x++) {
-            for(let y = 0; y < 12; y++) {
-                createObject(x * gap, y * gap + 1, -5);
-            }
-        }
-
+// Helper function to create the cube mesh
+function addFallbackCube(body, size) {
+    const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size, size),
+        new THREE.MeshStandardMaterial({ 
+            color: new THREE.Color().setHSL(Math.random(), 0.7, 0.5) 
+        })
+    );
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    physicsObjects.push({ mesh, body });
+}
         // ==========================================
         // 7. SHOOTING
         // ==========================================
