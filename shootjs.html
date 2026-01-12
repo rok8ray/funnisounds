@@ -68,6 +68,14 @@
         const controls = new PointerLockControls(camera, document.body);
         const moveState = { forward: false, backward: false, left: false, right: false, up: false, down: false };
 
+        const tloader = new THREE.TextureLoader();
+
+        tloader.load('https://th.bing.com/th/id/R.343cce3e2109fd465c0209a6cb1e01e5?rik=PxxMvPXZWNxgpA&riu=http%3a%2f%2f1.bp.blogspot.com%2f-515irK7ZyVA%2fUOkEWfSfaRI%2fAAAAAAAAA3k%2filB7zoK4gFc%2fs1600%2fObama%2bofficial%2bhd%2bwallpaper.jpg&ehk=nqBBruQ3wedRjmQDYwzNfXVhMfsTyubfqBqk%2bf93Z8g%3d&risl=&pid=ImgRaw&r=0', (texture) => {
+              texture.mapping = THREE.EquirectangularReflectionMapping;
+              scene.background = texture;
+        });
+
+        
         document.addEventListener('click', () => { 
             if (!controls.isLocked) controls.lock(); 
             else if (!isSpawning) shoot(); 
