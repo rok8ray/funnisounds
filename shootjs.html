@@ -123,38 +123,60 @@
         }
 
         function createObject(x, y, z, onDone) {
-            const size = 1.8;
-            const body = new CANNON.Body({ 
-                mass: 1, 
-                shape: new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2)) 
-            });
-            body.position.set(x, y, z);
-            
-            body.addEventListener('collide', (e) => {
-                const other = e.contact.bi === body ? e.contact.bj : e.contact.bi;
-                if (other.isProjectile && !body.hit) {
-                    body.hit = true;
-                    body.shrinkStart = performance.now();
-                }
-            });
+    const size = 1.8;
+    // --- ADJUST HITBOX HERE ---
+    // Increase this number (e.g., 1.1 or 1.2) to make the hitbox bigger than the model
+    const hitboxExpansion = 1.1; 
+    const halfSize = (size * hitboxExpansion) / 2;
 
-            world.addBody(body);
-
-            // --- LOAD THE PRISM MODEL ---
-            loader.load(MODEL_URL, (gltf) => {
-                const model = gltf.scene.clone();
-                model.scale.set(size, size, size);
-                scene.add(model);
-                physicsObjects.push({ mesh: model, body: body, isTarget: true, originalScale: size });
-                onDone();
-            }, undefined, (err) => {
-                // Fallback if model fails to load
-                const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshStandardMaterial({ color: 0x00ff88 }));
-                scene.add(mesh);
-                physicsObjects.push({ mesh, body, isTarget: true, originalScale: size });
-                onDone();
-            });
+    const body = new CANNON.Body({ 
+        mass: 1, 
+        shape: new CANNON.Box(new CANNON.Vec3(halfSize, halfSize, halfSize)) 
+    });
+    body.position.set(x, y, z);
+    
+    body.addEventListener('collide', (e) => {
+        const other = e.contact.bi === body ? e.contact.bj : e.contact.bi;
+        if (other.isProjectile && !body.hit) {
+            body.hit = true;
+            body.shrinkStart = performance.now();
         }
+    });
+
+    world.addBody(body);
+
+    loader.load(MODEL_URL, (gltf) => {
+        const model = gltf.scene.clone();
+        
+        // --- CENTER THE MODEL ---
+        // This ensures the model is centered exactly on the physics body
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        model.position.sub(center); 
+        
+        const wrapper = new THREE.Group();
+        wrapper.add(model);
+        wrapper.scale.set(size, size, size);
+        scene.add(wrapper);
+
+        physicsObjects.push({ 
+            mesh: wrapper, 
+            body: body, 
+            isTarget: true, 
+            originalScale: size 
+        });
+        onDone();
+    }, undefined, (err) => {
+        // Fallback
+        const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(size * hitboxExpansion, size * hitboxExpansion, size * hitboxExpansion), 
+            new THREE.MeshStandardMaterial({ color: 0x00ff88, wireframe: true })
+        );
+        scene.add(mesh);
+        physicsObjects.push({ mesh, body, isTarget: true, originalScale: size });
+        onDone();
+    });
+}
 
         function shoot() {
             const radius = 0.5;
