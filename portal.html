@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Three.js Portal - Momentum Boost</title>
+    <title>Three.js Portal - Puzzle Engine</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         #crosshair {
@@ -22,9 +22,10 @@
 
     <div id="crosshair"></div>
     <div id="instructions">
-        <b>Portal Momentum Engine</b><br>
-        WASD: Move | SPACE: Jump | E: Grab & Throw<br>
-        Click: Fire Portals (Left/Right)
+        <b>Portal Puzzle: Level 1</b><br>
+        1. Find the Red Plate on the floor.<br>
+        2. Place a cube on it to open the Door.<br>
+        WASD: Move | SPACE: Jump | E: Grab/Throw
     </div>
 
     <script type="importmap">
@@ -53,6 +54,7 @@
         const gravity = -0.012; 
         const eyeHeight = 1.6; 
         let canTeleportPlayer = true;
+        let doorOpen = false;
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -79,14 +81,16 @@
         const wallMat = new THREE.MeshPhongMaterial({ map: wallTex });
         const surfaceMat = new THREE.MeshPhongMaterial({ map: surfaceTex });
 
-        // --- 2. Room ---
+        // --- 2. Room & Puzzle Construction ---
         const createWall = (w, h, d, x, y, z) => {
             const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
             m.position.set(x, y, z);
             scene.add(m);
             walls.push(m);
+            return m;
         };
 
+        // Boundaries
         createWall(60, 100, 5, 0, 50, -32.5); 
         createWall(60, 100, 5, 0, 50, 32.5);  
         createWall(5, 100, 60, 32.5, 50, 0);  
@@ -103,12 +107,22 @@
         scene.add(ceiling);
         surfaces.push(ceiling);
 
+        // --- Puzzle Elements ---
+        const door = createWall(20, 15, 2, 0, 7.5, 10); // The Door
+        door.material = new THREE.MeshPhongMaterial({ color: 0x555555 });
+
+        const plateGeo = new THREE.BoxGeometry(4, 0.2, 4);
+        const plateMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const plate = new THREE.Mesh(plateGeo, plateMat);
+        plate.position.set(15, 0.1, -15);
+        scene.add(plate);
+
         // --- 3. Boxes ---
         const boxGeo = new THREE.BoxGeometry(2, 2, 2);
         const boxMat = new THREE.MeshPhongMaterial({ color: 0xff4444 });
-        for(let i = 0; i < 4; i++) {
+        for(let i = 0; i < 3; i++) {
             const box = new THREE.Mesh(boxGeo, boxMat);
-            box.position.set(Math.random() * 20 - 10, 5, Math.random() * 20 - 10);
+            box.position.set(Math.random() * 10 - 20, 5, Math.random() * 10 - 20);
             box.velocity = new THREE.Vector3(0, 0, 0);
             box.canTeleport = true; 
             scene.add(box);
@@ -134,17 +148,14 @@
                 if (heldBox) {
                     const dir = new THREE.Vector3();
                     camera.getWorldDirection(dir);
-                    heldBox.velocity.copy(dir.multiplyScalar(0.6));
+                    heldBox.velocity.copy(dir.multiplyScalar(0.7));
                     heldBox = null;
                 } else {
                     let closest = null;
                     let minDist = holdDistance;
                     boxes.forEach(box => {
                         const d = camera.position.distanceTo(box.position);
-                        if (d < minDist) {
-                            minDist = d;
-                            closest = box;
-                        }
+                        if (d < minDist) { minDist = d; closest = box; }
                     });
                     heldBox = closest;
                 }
@@ -175,7 +186,6 @@
         // --- 6. Teleportation Logic ---
         function teleportObject(obj, exitPortal, isPlayer) {
             const entryPortal = (exitPortal === bluePortal) ? orangePortal : bluePortal;
-            
             if (isPlayer) {
                 canTeleportPlayer = false;
                 setTimeout(() => { canTeleportPlayer = true; }, 100);
@@ -190,26 +200,22 @@
 
             const entryNormal = entryPortal.facing.clone();
             const exitNormal = exitPortal.facing.clone();
-            const quaternion = new THREE.Quaternion().setFromUnitVectors(
-                entryNormal.clone().negate(), 
-                exitNormal
-            );
+            const quaternion = new THREE.Quaternion().setFromUnitVectors(entryNormal.clone().negate(), exitNormal);
             currentVel.applyQuaternion(quaternion);
 
-            const speedMultiplier = 1.5; 
-            currentVel.multiplyScalar(speedMultiplier);
+            currentVel.multiplyScalar(1.5); // Momentum Boost
 
             if (isPlayer) {
                 velocityXZ.set(currentVel.x, 0, currentVel.z);
                 velocityY = currentVel.y;
-                camera.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(1.5));
+                camera.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(2.0));
             } else {
                 obj.velocity.copy(currentVel);
-                obj.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(1.5));
+                obj.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(2.0));
             }
         }
 
-        // --- 7. Animation ---
+        // --- 7. Animation Loop ---
         function animate() {
             requestAnimationFrame(animate);
             if (controls.isLocked) {
@@ -219,7 +225,6 @@
                 if (camera.position.y <= eyeHeight) {
                     const nearBlue = (bluePortal.visible && camera.position.distanceTo(bluePortal.position) < 2.5 && Math.abs(bluePortal.facing.y) > 0.5);
                     const nearOrange = (orangePortal.visible && camera.position.distanceTo(orangePortal.position) < 2.5 && Math.abs(orangePortal.facing.y) > 0.5);
-                    
                     if (!nearBlue && !nearOrange) {
                         camera.position.y = eyeHeight;
                         velocityY = Math.max(0, velocityY);
@@ -236,47 +241,65 @@
                 if (keys['KeyA']) controls.moveRight(-0.18);
                 if (keys['KeyD']) controls.moveRight(0.18);
 
+                // Player Collision
                 for (let wall of walls) {
                     const wallBB = new THREE.Box3().setFromObject(wall);
                     if (wallBB.expandByScalar(0.8).containsPoint(camera.position)) camera.position.copy(oldPos);
                 }
 
+                // Puzzle Interaction: Pressure Plate
+                let plateActive = false;
+                boxes.forEach(box => {
+                    if (box.position.distanceTo(plate.position) < 2.5) plateActive = true;
+                });
+
+                if (plateActive && !doorOpen) {
+                    door.position.y += 15;
+                    plate.material.color.set(0x00ff00);
+                    walls.splice(walls.indexOf(door), 1); // Disable collision
+                    doorOpen = true;
+                } else if (!plateActive && doorOpen) {
+                    door.position.y -= 15;
+                    plate.material.color.set(0xff0000);
+                    walls.push(door); // Enable collision
+                    doorOpen = false;
+                }
+
+                // Box Logic
                 boxes.forEach(box => {
                     if (heldBox === box) {
                         const holdPos = camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(holdDistance));
                         box.position.copy(holdPos);
-                        box.quaternion.copy(camera.quaternion);
                         box.velocity.set(0, 0, 0);
                     } else {
+                        // Gravity & Friction
                         if (box.position.y > 1) {
                             box.velocity.y += gravity;
                         } else {
                             const nearBlue = (bluePortal.visible && box.position.distanceTo(bluePortal.position) < 2 && Math.abs(bluePortal.facing.y) > 0.5);
                             const nearOrange = (orangePortal.visible && box.position.distanceTo(orangePortal.position) < 2 && Math.abs(orangePortal.facing.y) > 0.5);
-                            
                             if (!nearBlue && !nearOrange) {
                                 box.position.y = 1;
                                 box.velocity.y = 0;
                                 box.velocity.x *= 0.85; box.velocity.z *= 0.85;
                             }
                         }
-                        
-                        // --- FIXED: Box Wall Collision ---
+
+                        // PREDICTIVE WALL COLLISION
                         const nextPos = box.position.clone().add(box.velocity);
                         let collided = false;
-
                         for (let wall of walls) {
                             const wallBB = new THREE.Box3().setFromObject(wall);
-                            if (wallBB.expandByScalar(1).containsPoint(nextPos)) {
-                                box.velocity.multiplyScalar(-0.5);
+                            if (wallBB.expandByScalar(1.0).containsPoint(nextPos)) {
+                                box.velocity.multiplyScalar(-0.4); // Bounce
                                 collided = true;
                                 break;
                             }
                         }
-
                         if (!collided) box.position.copy(nextPos);
                         box.velocity.multiplyScalar(0.99);
 
+                        // Teleport
                         if (bluePortal.visible && orangePortal.visible && box.canTeleport) {
                             if (box.position.distanceTo(bluePortal.position) < 1.8) teleportObject(box, orangePortal, false);
                             else if (box.position.distanceTo(orangePortal.position) < 1.8) teleportObject(box, bluePortal, false);
@@ -284,6 +307,7 @@
                     }
                 });
 
+                // Player Teleport
                 if (bluePortal.visible && orangePortal.visible && canTeleportPlayer) {
                     if (camera.position.distanceTo(bluePortal.position) < 2.0) teleportObject(camera, orangePortal, true);
                     else if (camera.position.distanceTo(orangePortal.position) < 2.0) teleportObject(camera, bluePortal, true);
