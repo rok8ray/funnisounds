@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Three.js Portal - True Momentum</title>
+    <title>Three.js Portal - Momentum Boost</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         #crosshair {
@@ -48,7 +48,6 @@
         const walls = [];
         const keys = {};
         
-        // Physics State
         let velocityY = 0;
         let velocityXZ = new THREE.Vector3();
         const gravity = -0.012; 
@@ -173,46 +172,42 @@
             }
         });
 
-        // --- 6. Teleportation Logic with Momentum ---
+        // --- 6. Fixed Teleportation Logic ---
         function teleportObject(obj, exitPortal, isPlayer) {
             const entryPortal = (exitPortal === bluePortal) ? orangePortal : bluePortal;
             
-            // Set cooldown
-
-            const speedMultiplier = 1.5; // Change this to 2.0 for double speed, etc.
-            currentVel.multiplyScalar(speedMultiplier);
-            
+            // Cooldowns
             if (isPlayer) {
                 canTeleportPlayer = false;
-                setTimeout(() => { canTeleportPlayer = true; }, 150);
+                setTimeout(() => { canTeleportPlayer = true; }, 100);
             } else {
                 obj.canTeleport = false;
-                setTimeout(() => { obj.canTeleport = true; }, 150);
+                setTimeout(() => { obj.canTeleport = true; }, 100);
             }
 
-            // 1. Get current 3D velocity
+            // 1. Get current 3D velocity FIRST
             let currentVel = isPlayer 
                 ? new THREE.Vector3(velocityXZ.x, velocityY, velocityXZ.z)
                 : obj.velocity.clone();
 
-            // 2. Transform velocity vector
-            // We rotate the velocity from the entry portal's orientation to the exit's
+            // 2. Transform velocity vector direction
             const entryNormal = entryPortal.facing.clone();
             const exitNormal = exitPortal.facing.clone();
-            
-            // The direction into the portal is -entryNormal. The direction out is exitNormal.
             const quaternion = new THREE.Quaternion().setFromUnitVectors(
                 entryNormal.clone().negate(), 
                 exitNormal
             );
             currentVel.applyQuaternion(quaternion);
 
-            // 3. Apply transformed velocity
+            // 3. APPLY MULTIPLIER (Momentum boost)
+            const speedMultiplier = 1.5; 
+            currentVel.multiplyScalar(speedMultiplier);
+
+            // 4. Apply to camera or box
             if (isPlayer) {
                 velocityXZ.set(currentVel.x, 0, currentVel.z);
                 velocityY = currentVel.y;
-                // Move player to exit portal and nudge out to avoid getting stuck
-                camera.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(1.2));
+                camera.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(1.5));
             } else {
                 obj.velocity.copy(currentVel);
                 obj.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(1.5));
@@ -223,13 +218,10 @@
         function animate() {
             requestAnimationFrame(animate);
             if (controls.isLocked) {
-                // Player Physics
                 velocityY += gravity;
                 camera.position.y += velocityY;
                 
-                // Floor Collision (Only if not teleporting through floor)
                 if (camera.position.y <= eyeHeight) {
-                    // Simple check: if there's no floor portal nearby, snap to floor
                     const nearBlue = (bluePortal.visible && camera.position.distanceTo(bluePortal.position) < 2.5 && Math.abs(bluePortal.facing.y) > 0.5);
                     const nearOrange = (orangePortal.visible && camera.position.distanceTo(orangePortal.position) < 2.5 && Math.abs(orangePortal.facing.y) > 0.5);
                     
@@ -241,7 +233,7 @@
                 }
 
                 camera.position.add(velocityXZ);
-                velocityXZ.multiplyScalar(0.98); // Air friction
+                velocityXZ.multiplyScalar(0.98); 
 
                 const oldPos = camera.position.clone();
                 if (keys['KeyW']) controls.moveForward(0.18);
@@ -249,14 +241,11 @@
                 if (keys['KeyA']) controls.moveRight(-0.18);
                 if (keys['KeyD']) controls.moveRight(0.18);
 
-                // Wall Collision
                 for (let wall of walls) {
                     const wallBB = new THREE.Box3().setFromObject(wall);
                     if (wallBB.expandByScalar(0.8).containsPoint(camera.position)) camera.position.copy(oldPos);
                 }
 
-                // Box Logic
-                let canPickSomething = false;
                 boxes.forEach(box => {
                     if (heldBox === box) {
                         const holdPos = camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(holdDistance));
@@ -264,7 +253,6 @@
                         box.quaternion.copy(camera.quaternion);
                         box.velocity.set(0, 0, 0);
                     } else {
-                        // Box gravity and floor
                         if (box.position.y > 1) {
                             box.velocity.y += gravity;
                         } else {
@@ -280,19 +268,13 @@
                         box.position.add(box.velocity);
                         box.velocity.multiplyScalar(0.99);
 
-                        // Box Teleport
                         if (bluePortal.visible && orangePortal.visible && box.canTeleport) {
                             if (box.position.distanceTo(bluePortal.position) < 1.8) teleportObject(box, orangePortal, false);
                             else if (box.position.distanceTo(orangePortal.position) < 1.8) teleportObject(box, bluePortal, false);
                         }
-
-                        if (camera.position.distanceTo(box.position) < holdDistance) canPickSomething = true;
                     }
                 });
 
-                document.getElementById('crosshair').style.borderColor = canPickSomething ? "#ff00ff" : "#00ff00";
-
-                // Player Teleport
                 if (bluePortal.visible && orangePortal.visible && canTeleportPlayer) {
                     if (camera.position.distanceTo(bluePortal.position) < 2.0) teleportObject(camera, orangePortal, true);
                     else if (camera.position.distanceTo(orangePortal.position) < 2.0) teleportObject(camera, bluePortal, true);
