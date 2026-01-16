@@ -240,10 +240,10 @@
         function teleportObject(obj, target, isPlayer) {
             if (isPlayer) {
                 canTeleportPlayer = false;
-                setTimeout(() => { canTeleportPlayer = true; }, 700);
+                setTimeout(() => { canTeleportPlayer = true; }, 400);
             } else {
                 obj.canTeleport = false;
-                setTimeout(() => { obj.canTeleport = true; }, 700);
+                setTimeout(() => { obj.canTeleport = true; }, 400);
             }
 
             let speed = isPlayer ? (Math.abs(velocityY) + velocityXZ.length()) : obj.velocity.length();
