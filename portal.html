@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Three.js Portal - Momentum & Boxes</title>
+    <title>Three.js Portal - True Momentum</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         #crosshair {
@@ -47,6 +47,8 @@
         const boxes = [];
         const walls = [];
         const keys = {};
+        
+        // Physics State
         let velocityY = 0;
         let velocityXZ = new THREE.Vector3();
         const gravity = -0.012; 
@@ -171,20 +173,71 @@
             }
         });
 
-        // --- 6. Animation ---
+        // --- 6. Teleportation Logic with Momentum ---
+        function teleportObject(obj, exitPortal, isPlayer) {
+            const entryPortal = (exitPortal === bluePortal) ? orangePortal : bluePortal;
+            
+            // Set cooldown
+            if (isPlayer) {
+                canTeleportPlayer = false;
+                setTimeout(() => { canTeleportPlayer = true; }, 150);
+            } else {
+                obj.canTeleport = false;
+                setTimeout(() => { obj.canTeleport = true; }, 150);
+            }
+
+            // 1. Get current 3D velocity
+            let currentVel = isPlayer 
+                ? new THREE.Vector3(velocityXZ.x, velocityY, velocityXZ.z)
+                : obj.velocity.clone();
+
+            // 2. Transform velocity vector
+            // We rotate the velocity from the entry portal's orientation to the exit's
+            const entryNormal = entryPortal.facing.clone();
+            const exitNormal = exitPortal.facing.clone();
+            
+            // The direction into the portal is -entryNormal. The direction out is exitNormal.
+            const quaternion = new THREE.Quaternion().setFromUnitVectors(
+                entryNormal.clone().negate(), 
+                exitNormal
+            );
+            currentVel.applyQuaternion(quaternion);
+
+            // 3. Apply transformed velocity
+            if (isPlayer) {
+                velocityXZ.set(currentVel.x, 0, currentVel.z);
+                velocityY = currentVel.y;
+                // Move player to exit portal and nudge out to avoid getting stuck
+                camera.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(1.2));
+            } else {
+                obj.velocity.copy(currentVel);
+                obj.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(1.5));
+            }
+        }
+
+        // --- 7. Animation ---
         function animate() {
             requestAnimationFrame(animate);
             if (controls.isLocked) {
                 // Player Physics
                 velocityY += gravity;
                 camera.position.y += velocityY;
+                
+                // Floor Collision (Only if not teleporting through floor)
                 if (camera.position.y <= eyeHeight) {
-                    camera.position.y = eyeHeight;
-                    velocityY = Math.max(0, velocityY);
-                    if (keys['Space']) velocityY = 0.3;
+                    // Simple check: if there's no floor portal nearby, snap to floor
+                    const nearBlue = (bluePortal.visible && camera.position.distanceTo(bluePortal.position) < 2.5 && Math.abs(bluePortal.facing.y) > 0.5);
+                    const nearOrange = (orangePortal.visible && camera.position.distanceTo(orangePortal.position) < 2.5 && Math.abs(orangePortal.facing.y) > 0.5);
+                    
+                    if (!nearBlue && !nearOrange) {
+                        camera.position.y = eyeHeight;
+                        velocityY = Math.max(0, velocityY);
+                        if (keys['Space']) velocityY = 0.3;
+                    }
                 }
+
                 camera.position.add(velocityXZ);
-                velocityXZ.multiplyScalar(0.98);
+                velocityXZ.multiplyScalar(0.98); // Air friction
 
                 const oldPos = camera.position.clone();
                 if (keys['KeyW']) controls.moveForward(0.18);
@@ -192,6 +245,7 @@
                 if (keys['KeyA']) controls.moveRight(-0.18);
                 if (keys['KeyD']) controls.moveRight(0.18);
 
+                // Wall Collision
                 for (let wall of walls) {
                     const wallBB = new THREE.Box3().setFromObject(wall);
                     if (wallBB.expandByScalar(0.8).containsPoint(camera.position)) camera.position.copy(oldPos);
@@ -206,59 +260,41 @@
                         box.quaternion.copy(camera.quaternion);
                         box.velocity.set(0, 0, 0);
                     } else {
+                        // Box gravity and floor
                         if (box.position.y > 1) {
                             box.velocity.y += gravity;
                         } else {
-                            box.position.y = 1;
-                            box.velocity.y = 0;
-                            box.velocity.x *= 0.85; box.velocity.z *= 0.85;
+                            const nearBlue = (bluePortal.visible && box.position.distanceTo(bluePortal.position) < 2 && Math.abs(bluePortal.facing.y) > 0.5);
+                            const nearOrange = (orangePortal.visible && box.position.distanceTo(orangePortal.position) < 2 && Math.abs(orangePortal.facing.y) > 0.5);
+                            
+                            if (!nearBlue && !nearOrange) {
+                                box.position.y = 1;
+                                box.velocity.y = 0;
+                                box.velocity.x *= 0.85; box.velocity.z *= 0.85;
+                            }
                         }
                         box.position.add(box.velocity);
                         box.velocity.multiplyScalar(0.99);
 
+                        // Box Teleport
                         if (bluePortal.visible && orangePortal.visible && box.canTeleport) {
-                            if (box.position.distanceTo(bluePortal.position) < 2.0) teleportObject(box, orangePortal, false);
-                            else if (box.position.distanceTo(orangePortal.position) < 2.0) teleportObject(box, bluePortal, false);
+                            if (box.position.distanceTo(bluePortal.position) < 1.8) teleportObject(box, orangePortal, false);
+                            else if (box.position.distanceTo(orangePortal.position) < 1.8) teleportObject(box, bluePortal, false);
                         }
 
                         if (camera.position.distanceTo(box.position) < holdDistance) canPickSomething = true;
                     }
                 });
 
-                // Update Crosshair Color
                 document.getElementById('crosshair').style.borderColor = canPickSomething ? "#ff00ff" : "#00ff00";
 
                 // Player Teleport
                 if (bluePortal.visible && orangePortal.visible && canTeleportPlayer) {
-                    if (camera.position.distanceTo(bluePortal.position) < 2.2) teleportObject(camera, orangePortal, true);
-                    else if (camera.position.distanceTo(orangePortal.position) < 2.2) teleportObject(camera, bluePortal, true);
+                    if (camera.position.distanceTo(bluePortal.position) < 2.0) teleportObject(camera, orangePortal, true);
+                    else if (camera.position.distanceTo(orangePortal.position) < 2.0) teleportObject(camera, bluePortal, true);
                 }
             }
             renderer.render(scene, camera);
-        }
-
-        function teleportObject(obj, target, isPlayer) {
-            if (isPlayer) {
-                canTeleportPlayer = false;
-                setTimeout(() => { canTeleportPlayer = true; }, 400);
-            } else {
-                obj.canTeleport = false;
-                setTimeout(() => { obj.canTeleport = true; }, 400);
-            }
-
-            let speed = isPlayer ? (Math.abs(velocityY) + velocityXZ.length()) : obj.velocity.length();
-            if (speed < 0.2) speed = 0.2;
-            const fling = speed * 1.3;
-
-            if (Math.abs(target.facing.y) > 0.5) {
-                if (isPlayer) { velocityY = target.facing.y * fling; velocityXZ.set(0,0,0); }
-                else { obj.velocity.set(0, target.facing.y * fling, 0); }
-            } else {
-                if (isPlayer) { velocityXZ.copy(target.facing).multiplyScalar(fling); velocityY = 0.15; }
-                else { obj.velocity.copy(target.facing).multiplyScalar(fling); obj.velocity.y += 0.1; }
-            }
-
-            obj.position.copy(target.position).add(target.facing.clone().multiplyScalar(2.5));
         }
 
         window.addEventListener('resize', () => {
@@ -272,4 +308,3 @@
     </script>
 </body>
 </html>
-
