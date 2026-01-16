@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Three.js Portal - Fixed Box Collisions</title>
+    <title>Three.js Portal - Momentum & Collision Fixed</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         #crosshair {
@@ -22,7 +22,7 @@
 
     <div id="crosshair"></div>
     <div id="instructions">
-        <b>Fixed Collision Engine</b><br>
+        <b>Portal Momentum Engine</b><br>
         WASD: Move | SPACE: Jump | E: Grab & Throw<br>
         Click: Fire Portals (Left/Right)
     </div>
@@ -37,11 +37,8 @@
     </script>
 
     <script type="module">
-        import * as THREE from 'this'; // Handled by importmap
-        import * as THREE_CORE from 'three';
+        import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-
-        const THREE = THREE_CORE;
 
         // --- Configuration & State ---
         let heldBox = null;
@@ -69,11 +66,10 @@
         const controls = new PointerLockControls(camera, document.body);
         document.body.addEventListener('click', () => controls.lock());
 
-        const loader = new THREE.TextureLoader();
+        // --- Room Construction ---
         const wallMat = new THREE.MeshPhongMaterial({ color: 0x888888 });
         const surfaceMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
 
-        // --- Room Construction ---
         const createWall = (w, h, d, x, y, z) => {
             const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
             m.position.set(x, y, z);
@@ -81,6 +77,7 @@
             walls.push(m);
         };
 
+        // Boundaries
         createWall(60, 100, 5, 0, 50, -32.5); 
         createWall(60, 100, 5, 0, 50, 32.5);  
         createWall(5, 100, 60, 32.5, 50, 0);  
@@ -121,7 +118,7 @@
                 if (heldBox) {
                     const dir = new THREE.Vector3();
                     camera.getWorldDirection(dir);
-                    heldBox.velocity.copy(dir.multiplyScalar(0.8)); // Throw speed
+                    heldBox.velocity.copy(dir.multiplyScalar(0.8));
                     heldBox = null;
                 } else {
                     let closest = null;
@@ -159,6 +156,7 @@
         // --- Teleportation ---
         function teleportObject(obj, exitPortal, isPlayer) {
             const entryPortal = (exitPortal === bluePortal) ? orangePortal : bluePortal;
+            
             if (isPlayer) {
                 canTeleportPlayer = false;
                 setTimeout(() => { canTeleportPlayer = true; }, 150);
@@ -177,7 +175,7 @@
             );
             currentVel.applyQuaternion(quaternion);
             
-            // Speed Boost
+            // Speed boost on exit
             currentVel.multiplyScalar(1.5);
 
             if (isPlayer) {
@@ -194,9 +192,10 @@
         function animate() {
             requestAnimationFrame(animate);
             if (controls.isLocked) {
-                // Player Physics
+                // Player Logic
                 velocityY += gravity;
                 camera.position.y += velocityY;
+                
                 if (camera.position.y <= eyeHeight) {
                     const nearBlue = (bluePortal.visible && camera.position.distanceTo(bluePortal.position) < 2.5 && Math.abs(bluePortal.facing.y) > 0.5);
                     const nearOrange = (orangePortal.visible && camera.position.distanceTo(orangePortal.position) < 2.5 && Math.abs(orangePortal.facing.y) > 0.5);
@@ -206,6 +205,7 @@
                         if (keys['Space']) velocityY = 0.3;
                     }
                 }
+
                 camera.position.add(velocityXZ);
                 velocityXZ.multiplyScalar(0.98);
 
@@ -215,20 +215,19 @@
                 if (keys['KeyA']) controls.moveRight(-0.18);
                 if (keys['KeyD']) controls.moveRight(0.18);
 
-                // Player Wall Collision
                 for (let wall of walls) {
                     const wallBB = new THREE.Box3().setFromObject(wall);
                     if (wallBB.expandByScalar(0.8).containsPoint(camera.position)) camera.position.copy(oldPos);
                 }
 
-                // BOX LOGIC
+                // Box Logic
                 boxes.forEach(box => {
                     if (heldBox === box) {
                         const holdPos = camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(holdDistance));
                         box.position.copy(holdPos);
-                        box.velocity.set(0, 0, 0);
+                        box.velocity.set(0,0,0);
                     } else {
-                        // Gravity & Floor
+                        // Gravity
                         if (box.position.y > 1) {
                             box.velocity.y += gravity;
                         } else {
@@ -241,18 +240,18 @@
                             }
                         }
 
-                        // NEW: Box Wall Collision (Prevents throwing through walls)
-                        const oldBoxPos = box.position.clone();
-                        box.position.add(box.velocity);
-                        
+                        // Wall Collision for Boxes
+                        const nextPos = box.position.clone().add(box.velocity);
+                        let collision = false;
                         for (let wall of walls) {
                             const wallBB = new THREE.Box3().setFromObject(wall);
-                            // If box enters a wall, bounce it back
-                            if (wallBB.expandByScalar(1.1).containsPoint(box.position)) {
-                                box.position.copy(oldBoxPos);
-                                box.velocity.multiplyScalar(-0.3); // Bounce effect
+                            if (wallBB.expandByScalar(1.0).containsPoint(nextPos)) {
+                                box.velocity.multiplyScalar(-0.3); // Bounce
+                                collision = true;
+                                break;
                             }
                         }
+                        if (!collision) box.position.copy(nextPos);
 
                         box.velocity.multiplyScalar(0.99);
 
@@ -264,6 +263,7 @@
                     }
                 });
 
+                // Player Teleport Check
                 if (bluePortal.visible && orangePortal.visible && canTeleportPlayer) {
                     if (camera.position.distanceTo(bluePortal.position) < 2.0) teleportObject(camera, orangePortal, true);
                     else if (camera.position.distanceTo(orangePortal.position) < 2.0) teleportObject(camera, bluePortal, true);
@@ -271,6 +271,12 @@
             }
             renderer.render(scene, camera);
         }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
 
         camera.position.set(0, eyeHeight, 5);
         animate();
