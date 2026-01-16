@@ -178,6 +178,10 @@
             const entryPortal = (exitPortal === bluePortal) ? orangePortal : bluePortal;
             
             // Set cooldown
+
+            const speedMultiplier = 1.5; // Change this to 2.0 for double speed, etc.
+            currentVel.multiplyScalar(speedMultiplier);
+            
             if (isPlayer) {
                 canTeleportPlayer = false;
                 setTimeout(() => { canTeleportPlayer = true; }, 150);
