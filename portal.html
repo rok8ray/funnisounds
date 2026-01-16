@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Three.js Portal - Momentum Boost</title>
+    <title>Three.js Portal - Fixed Box Collisions</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         #crosshair {
@@ -22,7 +22,7 @@
 
     <div id="crosshair"></div>
     <div id="instructions">
-        <b>Portal Momentum Engine</b><br>
+        <b>Fixed Collision Engine</b><br>
         WASD: Move | SPACE: Jump | E: Grab & Throw<br>
         Click: Fire Portals (Left/Right)
     </div>
@@ -37,8 +37,11 @@
     </script>
 
     <script type="module">
-        import * as THREE from 'three';
+        import * as THREE from 'this'; // Handled by importmap
+        import * as THREE_CORE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        const THREE = THREE_CORE;
 
         // --- Configuration & State ---
         let heldBox = null;
@@ -66,20 +69,11 @@
         const controls = new PointerLockControls(camera, document.body);
         document.body.addEventListener('click', () => controls.lock());
 
-        // --- 1. Textures ---
         const loader = new THREE.TextureLoader();
-        const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
-        wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
-        wallTex.repeat.set(4, 2);
-        
-        const surfaceTex = loader.load('https://threejs.org/examples/textures/grid.png');
-        surfaceTex.wrapS = surfaceTex.wrapT = THREE.RepeatWrapping;
-        surfaceTex.repeat.set(20, 20);
+        const wallMat = new THREE.MeshPhongMaterial({ color: 0x888888 });
+        const surfaceMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
 
-        const wallMat = new THREE.MeshPhongMaterial({ map: wallTex });
-        const surfaceMat = new THREE.MeshPhongMaterial({ map: surfaceTex });
-
-        // --- 2. Room ---
+        // --- Room Construction ---
         const createWall = (w, h, d, x, y, z) => {
             const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
             m.position.set(x, y, z);
@@ -98,24 +92,18 @@
         scene.add(floor);
         surfaces.push(floor);
 
-        const ceiling = new THREE.Mesh(new THREE.BoxGeometry(60, 2, 60), surfaceMat);
-        ceiling.position.set(0, 51, 0); 
-        scene.add(ceiling);
-        surfaces.push(ceiling);
-
-        // --- 3. Boxes ---
+        // --- Boxes ---
         const boxGeo = new THREE.BoxGeometry(2, 2, 2);
-        const boxMat = new THREE.MeshPhongMaterial({ color: 0xff4444 });
         for(let i = 0; i < 4; i++) {
-            const box = new THREE.Mesh(boxGeo, boxMat);
-            box.position.set(Math.random() * 20 - 10, 5, Math.random() * 20 - 10);
+            const box = new THREE.Mesh(boxGeo, new THREE.MeshPhongMaterial({ color: 0xff4444 }));
+            box.position.set(Math.random() * 10 - 5, 5, Math.random() * 10 - 5);
             box.velocity = new THREE.Vector3(0, 0, 0);
             box.canTeleport = true; 
             scene.add(box);
             boxes.push(box);
         }
 
-        // --- 4. Portals ---
+        // --- Portals ---
         const portalGeo = new THREE.CylinderGeometry(1.5, 1.5, 0.2, 32);
         const bluePortal = new THREE.Mesh(portalGeo, new THREE.MeshBasicMaterial({ color: 0x00ccff }));
         const orangePortal = new THREE.Mesh(portalGeo, new THREE.MeshBasicMaterial({ color: 0xff9900 }));
@@ -124,31 +112,27 @@
         bluePortal.visible = orangePortal.visible = false;
         scene.add(bluePortal, orangePortal);
 
-        // --- 5. Inputs ---
+        // --- Inputs ---
         document.addEventListener('keydown', e => keys[e.code] = true);
         document.addEventListener('keyup', e => keys[e.code] = false);
 
         window.addEventListener('keydown', (e) => {
-            const currentTime = performance.now();
-            if (e.code === 'KeyE' && currentTime - lastGrabTime > 250) {
+            if (e.code === 'KeyE' && performance.now() - lastGrabTime > 250) {
                 if (heldBox) {
                     const dir = new THREE.Vector3();
                     camera.getWorldDirection(dir);
-                    heldBox.velocity.copy(dir.multiplyScalar(0.6));
+                    heldBox.velocity.copy(dir.multiplyScalar(0.8)); // Throw speed
                     heldBox = null;
                 } else {
                     let closest = null;
                     let minDist = holdDistance;
                     boxes.forEach(box => {
                         const d = camera.position.distanceTo(box.position);
-                        if (d < minDist) {
-                            minDist = d;
-                            closest = box;
-                        }
+                        if (d < minDist) { minDist = d; closest = box; }
                     });
                     heldBox = closest;
                 }
-                lastGrabTime = currentTime;
+                lastGrabTime = performance.now();
             }
         });
 
@@ -172,68 +156,58 @@
             }
         });
 
-        // --- 6. Fixed Teleportation Logic ---
+        // --- Teleportation ---
         function teleportObject(obj, exitPortal, isPlayer) {
             const entryPortal = (exitPortal === bluePortal) ? orangePortal : bluePortal;
-            
-            // Cooldowns
             if (isPlayer) {
                 canTeleportPlayer = false;
-                setTimeout(() => { canTeleportPlayer = true; }, 100);
+                setTimeout(() => { canTeleportPlayer = true; }, 150);
             } else {
                 obj.canTeleport = false;
-                setTimeout(() => { obj.canTeleport = true; }, 100);
+                setTimeout(() => { obj.canTeleport = true; }, 150);
             }
 
-            // 1. Get current 3D velocity FIRST
             let currentVel = isPlayer 
                 ? new THREE.Vector3(velocityXZ.x, velocityY, velocityXZ.z)
                 : obj.velocity.clone();
 
-            // 2. Transform velocity vector direction
-            const entryNormal = entryPortal.facing.clone();
-            const exitNormal = exitPortal.facing.clone();
             const quaternion = new THREE.Quaternion().setFromUnitVectors(
-                entryNormal.clone().negate(), 
-                exitNormal
+                entryPortal.facing.clone().negate(), 
+                exitPortal.facing
             );
             currentVel.applyQuaternion(quaternion);
+            
+            // Speed Boost
+            currentVel.multiplyScalar(1.5);
 
-            // 3. APPLY MULTIPLIER (Momentum boost)
-            const speedMultiplier = 1.5; 
-            currentVel.multiplyScalar(speedMultiplier);
-
-            // 4. Apply to camera or box
             if (isPlayer) {
                 velocityXZ.set(currentVel.x, 0, currentVel.z);
                 velocityY = currentVel.y;
-                camera.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(1.5));
+                camera.position.copy(exitPortal.position).add(exitPortal.facing.clone().multiplyScalar(2.0));
             } else {
                 obj.velocity.copy(currentVel);
-                obj.position.copy(exitPortal.position).add(exitNormal.clone().multiplyScalar(1.5));
+                obj.position.copy(exitPortal.position).add(exitPortal.facing.clone().multiplyScalar(2.0));
             }
         }
 
-        // --- 7. Animation ---
+        // --- Main Loop ---
         function animate() {
             requestAnimationFrame(animate);
             if (controls.isLocked) {
+                // Player Physics
                 velocityY += gravity;
                 camera.position.y += velocityY;
-                
                 if (camera.position.y <= eyeHeight) {
                     const nearBlue = (bluePortal.visible && camera.position.distanceTo(bluePortal.position) < 2.5 && Math.abs(bluePortal.facing.y) > 0.5);
                     const nearOrange = (orangePortal.visible && camera.position.distanceTo(orangePortal.position) < 2.5 && Math.abs(orangePortal.facing.y) > 0.5);
-                    
                     if (!nearBlue && !nearOrange) {
                         camera.position.y = eyeHeight;
                         velocityY = Math.max(0, velocityY);
                         if (keys['Space']) velocityY = 0.3;
                     }
                 }
-
                 camera.position.add(velocityXZ);
-                velocityXZ.multiplyScalar(0.98); 
+                velocityXZ.multiplyScalar(0.98);
 
                 const oldPos = camera.position.clone();
                 if (keys['KeyW']) controls.moveForward(0.18);
@@ -241,33 +215,48 @@
                 if (keys['KeyA']) controls.moveRight(-0.18);
                 if (keys['KeyD']) controls.moveRight(0.18);
 
+                // Player Wall Collision
                 for (let wall of walls) {
                     const wallBB = new THREE.Box3().setFromObject(wall);
                     if (wallBB.expandByScalar(0.8).containsPoint(camera.position)) camera.position.copy(oldPos);
                 }
 
+                // BOX LOGIC
                 boxes.forEach(box => {
                     if (heldBox === box) {
                         const holdPos = camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(holdDistance));
                         box.position.copy(holdPos);
-                        box.quaternion.copy(camera.quaternion);
                         box.velocity.set(0, 0, 0);
                     } else {
+                        // Gravity & Floor
                         if (box.position.y > 1) {
                             box.velocity.y += gravity;
                         } else {
                             const nearBlue = (bluePortal.visible && box.position.distanceTo(bluePortal.position) < 2 && Math.abs(bluePortal.facing.y) > 0.5);
                             const nearOrange = (orangePortal.visible && box.position.distanceTo(orangePortal.position) < 2 && Math.abs(orangePortal.facing.y) > 0.5);
-                            
                             if (!nearBlue && !nearOrange) {
                                 box.position.y = 1;
                                 box.velocity.y = 0;
-                                box.velocity.x *= 0.85; box.velocity.z *= 0.85;
+                                box.velocity.x *= 0.8; box.velocity.z *= 0.8;
                             }
                         }
+
+                        // NEW: Box Wall Collision (Prevents throwing through walls)
+                        const oldBoxPos = box.position.clone();
                         box.position.add(box.velocity);
+                        
+                        for (let wall of walls) {
+                            const wallBB = new THREE.Box3().setFromObject(wall);
+                            // If box enters a wall, bounce it back
+                            if (wallBB.expandByScalar(1.1).containsPoint(box.position)) {
+                                box.position.copy(oldBoxPos);
+                                box.velocity.multiplyScalar(-0.3); // Bounce effect
+                            }
+                        }
+
                         box.velocity.multiplyScalar(0.99);
 
+                        // Teleport Check
                         if (bluePortal.visible && orangePortal.visible && box.canTeleport) {
                             if (box.position.distanceTo(bluePortal.position) < 1.8) teleportObject(box, orangePortal, false);
                             else if (box.position.distanceTo(orangePortal.position) < 1.8) teleportObject(box, bluePortal, false);
@@ -282,12 +271,6 @@
             }
             renderer.render(scene, camera);
         }
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
 
         camera.position.set(0, eyeHeight, 5);
         animate();
