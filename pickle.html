@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pickle Clicker</title>
+    <style>
+        /* CSS - The Look */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #2c3e50;
+            color: white;
+            margin: 0;
+        }
+
+        .game-container {
+            text-align: center;
+            background: #34495e;
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+            width: 320px;
+        }
+
+        #score-container {
+            margin-bottom: 20px;
+        }
+
+        h1 { margin: 0; font-size: 2.5rem; color: #f1c40f; }
+        p { margin: 5px 0; opacity: 0.8; }
+
+        /* The Clicker Image */
+        #image-container {
+            margin: 20px 0;
+            position: relative;
+        }
+
+        #clicker-image {
+            width: 200px;
+            height: 200px;
+            cursor: pointer;
+            transition: transform 0.05s;
+            user-select: none;
+            border-radius: 15px;
+            border: 5px solid #ecf0f1;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+        }
+
+        #clicker-image:active {
+            transform: scale(0.92);
+        }
+
+        /* Shop Styling */
+        .shop {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px;
+            cursor: pointer;
+            border: none;
+            background: #27ae60;
+            color: white;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background: #2ecc71;
+        }
+
+        button:disabled {
+            background: #7f8c8d;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .cost-text {
+            font-size: 0.8rem;
+            display: block;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <div id="score-container">
+            <h1 id="score">0</h1>
+            <p>Points per second: <span id="pps">0</span></p>
+        </div>
+        
+        <div id="image-container">
+            <img src="https://static.vecteezy.com/system/resources/previews/058/352/114/non_2x/funny-pickle-cartoon-clipart-vector.jpg" id="clicker-image" alt="Click Me!">
+        </div>
+
+        <div class="shop">
+            <button id="buy-click-power">
+                Upgrade Click (+1)
+                <span class="cost-text">Cost: <span id="click-cost">10</span></span>
+            </button>
+            <button id="buy-auto-clicker">
+                Hire Auto-Clicker (+1/s)
+                <span class="cost-text">Cost: <span id="auto-cost">50</span></span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // JavaScript - The Logic
+        let score = 0;
+        let clickPower = 1;
+        let autoClickers = 0;
+
+        let clickUpgradeCost = 10;
+        let autoUpgradeCost = 50;
+
+        // Elements
+        const scoreEl = document.getElementById('score');
+        const ppsEl = document.getElementById('pps');
+        const clickerImg = document.getElementById('clicker-image');
+        const buyClickBtn = document.getElementById('buy-click-power');
+        const buyAutoBtn = document.getElementById('buy-auto-clicker');
+        const clickCostEl = document.getElementById('click-cost');
+        const autoCostEl = document.getElementById('auto-cost');
+
+        // Initial update
+        updateDisplay();
+
+        // 1. Manual Clicking
+        clickerImg.addEventListener('click', () => {
+            score += clickPower;
+            updateDisplay();
+        });
+
+        // 2. Buy Click Power
+        buyClickBtn.addEventListener('click', () => {
+            if (score >= clickUpgradeCost) {
+                score -= clickUpgradeCost;
+                clickPower += 1;
+                // Increase cost for next time (exponential growth)
+                clickUpgradeCost = Math.floor(clickUpgradeCost * 1.6);
+                updateDisplay();
+            }
+        });
+
+        // 3. Buy Auto Clicker
+        buyAutoBtn.addEventListener('click', () => {
+            if (score >= autoUpgradeCost) {
+                score -= autoUpgradeCost;
+                autoClickers += 1;
+                autoUpgradeCost = Math.floor(autoUpgradeCost * 1.8);
+                updateDisplay();
+            }
+        });
+
+        // 4. The "Passive Income" Loop
+        // This runs every 100ms for smoother score updates
+        setInterval(() => {
+            if (autoClickers > 0) {
+                score += (autoClickers / 10); 
+                updateDisplay();
+            }
+        }, 100);
+
+        function updateDisplay() {
+            // Math.floor handles the decimal points from the 100ms interval
+            scoreEl.innerText = Math.floor(score);
+            ppsEl.innerText = autoClickers;
+            clickCostEl.innerText = clickUpgradeCost;
+            autoCostEl.innerText = autoUpgradeCost;
+            
+            // Disable buttons if player is too poor
+            buyClickBtn.disabled = score < clickUpgradeCost;
+            buyAutoBtn.disabled = score < autoUpgradeCost;
+        }
+    </script>
+</body>
+</html>
+
