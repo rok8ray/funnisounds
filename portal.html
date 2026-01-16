@@ -23,8 +23,8 @@
     <div id="crosshair"></div>
     <div id="instructions">
         <b>Portal Puzzle: Level 1</b><br>
-        1. Find the Red Plate on the floor.<br>
-        2. Place a cube on it to open the Door.<br>
+        1. The Glass Barrier blocks the way.<br>
+        2. Fling the Cube onto the High Ledge.<br>
         WASD: Move | SPACE: Jump | E: Grab/Throw
     </div>
 
@@ -78,12 +78,16 @@
         surfaceTex.wrapS = surfaceTex.wrapT = THREE.RepeatWrapping;
         surfaceTex.repeat.set(20, 20);
 
+        const doorTex = loader.load('https://tse2.mm.bing.net/th/id/OIP.r_O1pkPXg3hteSE-QtKejAHaHb?rs=1&pid=ImgDetMain&o=7&rm=3');
+
         const wallMat = new THREE.MeshPhongMaterial({ map: wallTex });
         const surfaceMat = new THREE.MeshPhongMaterial({ map: surfaceTex });
+        const doorMat = new THREE.MeshPhongMaterial({ map: doorTex });
+        const glassMat = new THREE.MeshPhongMaterial({ color: 0x00ffff, transparent: true, opacity: 0.2, shininess: 100 });
 
         // --- 2. Room & Puzzle Construction ---
-        const createWall = (w, h, d, x, y, z) => {
-            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+        const createWall = (w, h, d, x, y, z, mat = wallMat) => {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
             m.position.set(x, y, z);
             scene.add(m);
             walls.push(m);
@@ -108,13 +112,20 @@
         surfaces.push(ceiling);
 
         // --- Puzzle Elements ---
-        const door = createWall(20, 15, 2, 0, 7.5, 10); // The Door
-        door.material = new THREE.MeshPhongMaterial({ color: 0x555555 });
+        // 1. The Glass Barrier (Blocks passage to the plate)
+        createWall(60, 20, 1, 0, 10, 0, glassMat);
 
+        // 2. The High Ledge (Plate location)
+        createWall(15, 2, 15, 15, 12, -20); 
+
+        // 3. The Door (The exit)
+        const door = createWall(12, 18, 2, -20, 9, -30, doorMat);
+
+        // 4. The Pressure Plate
         const plateGeo = new THREE.BoxGeometry(4, 0.2, 4);
         const plateMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
         const plate = new THREE.Mesh(plateGeo, plateMat);
-        plate.position.set(15, 0.1, -15);
+        plate.position.set(15, 13.1, -20); 
         scene.add(plate);
 
         // --- 3. Boxes ---
@@ -122,7 +133,7 @@
         const boxMat = new THREE.MeshPhongMaterial({ color: 0xff4444 });
         for(let i = 0; i < 3; i++) {
             const box = new THREE.Mesh(boxGeo, boxMat);
-            box.position.set(Math.random() * 10 - 20, 5, Math.random() * 10 - 20);
+            box.position.set(Math.random() * 10 - 20, 5, Math.random() * 10 + 10);
             box.velocity = new THREE.Vector3(0, 0, 0);
             box.canTeleport = true; 
             scene.add(box);
@@ -203,7 +214,7 @@
             const quaternion = new THREE.Quaternion().setFromUnitVectors(entryNormal.clone().negate(), exitNormal);
             currentVel.applyQuaternion(quaternion);
 
-            currentVel.multiplyScalar(1.5); // Momentum Boost
+            currentVel.multiplyScalar(1.5);
 
             if (isPlayer) {
                 velocityXZ.set(currentVel.x, 0, currentVel.z);
@@ -241,13 +252,12 @@
                 if (keys['KeyA']) controls.moveRight(-0.18);
                 if (keys['KeyD']) controls.moveRight(0.18);
 
-                // Player Collision
                 for (let wall of walls) {
                     const wallBB = new THREE.Box3().setFromObject(wall);
                     if (wallBB.expandByScalar(0.8).containsPoint(camera.position)) camera.position.copy(oldPos);
                 }
 
-                // Puzzle Interaction: Pressure Plate
+                // Puzzle Logic
                 let plateActive = false;
                 boxes.forEach(box => {
                     if (box.position.distanceTo(plate.position) < 2.5) plateActive = true;
@@ -256,23 +266,21 @@
                 if (plateActive && !doorOpen) {
                     door.position.y += 15;
                     plate.material.color.set(0x00ff00);
-                    walls.splice(walls.indexOf(door), 1); // Disable collision
+                    walls.splice(walls.indexOf(door), 1);
                     doorOpen = true;
                 } else if (!plateActive && doorOpen) {
                     door.position.y -= 15;
                     plate.material.color.set(0xff0000);
-                    walls.push(door); // Enable collision
+                    walls.push(door);
                     doorOpen = false;
                 }
 
-                // Box Logic
                 boxes.forEach(box => {
                     if (heldBox === box) {
                         const holdPos = camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(holdDistance));
                         box.position.copy(holdPos);
                         box.velocity.set(0, 0, 0);
                     } else {
-                        // Gravity & Friction
                         if (box.position.y > 1) {
                             box.velocity.y += gravity;
                         } else {
@@ -285,13 +293,12 @@
                             }
                         }
 
-                        // PREDICTIVE WALL COLLISION
                         const nextPos = box.position.clone().add(box.velocity);
                         let collided = false;
                         for (let wall of walls) {
                             const wallBB = new THREE.Box3().setFromObject(wall);
                             if (wallBB.expandByScalar(1.0).containsPoint(nextPos)) {
-                                box.velocity.multiplyScalar(-0.4); // Bounce
+                                box.velocity.multiplyScalar(-0.4);
                                 collided = true;
                                 break;
                             }
@@ -299,7 +306,6 @@
                         if (!collided) box.position.copy(nextPos);
                         box.velocity.multiplyScalar(0.99);
 
-                        // Teleport
                         if (bluePortal.visible && orangePortal.visible && box.canTeleport) {
                             if (box.position.distanceTo(bluePortal.position) < 1.8) teleportObject(box, orangePortal, false);
                             else if (box.position.distanceTo(orangePortal.position) < 1.8) teleportObject(box, bluePortal, false);
@@ -307,7 +313,6 @@
                     }
                 });
 
-                // Player Teleport
                 if (bluePortal.visible && orangePortal.visible && canTeleportPlayer) {
                     if (camera.position.distanceTo(bluePortal.position) < 2.0) teleportObject(camera, orangePortal, true);
                     else if (camera.position.distanceTo(orangePortal.position) < 2.0) teleportObject(camera, bluePortal, true);
@@ -322,7 +327,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        camera.position.set(0, eyeHeight, 5);
+        camera.position.set(0, eyeHeight, 20); // Start in the safe zone
         animate();
     </script>
 </body>
