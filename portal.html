@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Three.js Portal - Momentum & Boxes</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 14px; height: 14px; border: 2px solid #00ff00;
+            border-radius: 50%; transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 10;
+        }
+        #instructions {
+            position: absolute; top: 20px; left: 20px;
+            color: white; background: rgba(0,0,0,0.8); padding: 15px;
+            pointer-events: none; border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="crosshair"></div>
+    <div id="instructions">
+        <b>Portal Momentum Engine</b><br>
+        WASD: Move | SPACE: Jump | E: Grab & Throw<br>
+        Click: Fire Portals (Left/Right)
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- Configuration & State ---
+        let heldBox = null;
+        const holdDistance = 4;
+        let lastGrabTime = 0; 
+        const boxes = [];
+        const walls = [];
+        const keys = {};
+        let velocityY = 0;
+        let velocityXZ = new THREE.Vector3();
+        const gravity = -0.012; 
+        const eyeHeight = 1.6; 
+        let canTeleportPlayer = true;
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const light = new THREE.HemisphereLight(0xffffff, 0x444444, 2.5);
+        scene.add(light);
+
+        const controls = new PointerLockControls(camera, document.body);
+        document.body.addEventListener('click', () => controls.lock());
+
+        // --- 1. Textures ---
+        const loader = new THREE.TextureLoader();
+        const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
+        wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
+        wallTex.repeat.set(4, 2);
+        
+        const surfaceTex = loader.load('https://threejs.org/examples/textures/grid.png');
+        surfaceTex.wrapS = surfaceTex.wrapT = THREE.RepeatWrapping;
+        surfaceTex.repeat.set(20, 20);
+
+        const wallMat = new THREE.MeshPhongMaterial({ map: wallTex });
+        const surfaceMat = new THREE.MeshPhongMaterial({ map: surfaceTex });
+
+        // --- 2. Room ---
+        const createWall = (w, h, d, x, y, z) => {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+            m.position.set(x, y, z);
+            scene.add(m);
+            walls.push(m);
+        };
+
+        createWall(60, 100, 5, 0, 50, -32.5); 
+        createWall(60, 100, 5, 0, 50, 32.5);  
+        createWall(5, 100, 60, 32.5, 50, 0);  
+        createWall(5, 100, 60, -32.5, 50, 0);  
+
+        const surfaces = [...walls];
+        const floor = new THREE.Mesh(new THREE.BoxGeometry(60, 2, 60), surfaceMat);
+        floor.position.set(0, -1, 0); 
+        scene.add(floor);
+        surfaces.push(floor);
+
+        const ceiling = new THREE.Mesh(new THREE.BoxGeometry(60, 2, 60), surfaceMat);
+        ceiling.position.set(0, 51, 0); 
+        scene.add(ceiling);
+        surfaces.push(ceiling);
+
+        // --- 3. Boxes ---
+        const boxGeo = new THREE.BoxGeometry(2, 2, 2);
+        const boxMat = new THREE.MeshPhongMaterial({ color: 0xff4444 });
+        for(let i = 0; i < 4; i++) {
+            const box = new THREE.Mesh(boxGeo, boxMat);
+            box.position.set(Math.random() * 20 - 10, 5, Math.random() * 20 - 10);
+            box.velocity = new THREE.Vector3(0, 0, 0);
+            box.canTeleport = true; 
+            scene.add(box);
+            boxes.push(box);
+        }
+
+        // --- 4. Portals ---
+        const portalGeo = new THREE.CylinderGeometry(1.5, 1.5, 0.2, 32);
+        const bluePortal = new THREE.Mesh(portalGeo, new THREE.MeshBasicMaterial({ color: 0x00ccff }));
+        const orangePortal = new THREE.Mesh(portalGeo, new THREE.MeshBasicMaterial({ color: 0xff9900 }));
+        bluePortal.facing = new THREE.Vector3();
+        orangePortal.facing = new THREE.Vector3();
+        bluePortal.visible = orangePortal.visible = false;
+        scene.add(bluePortal, orangePortal);
+
+        // --- 5. Inputs ---
+        document.addEventListener('keydown', e => keys[e.code] = true);
+        document.addEventListener('keyup', e => keys[e.code] = false);
+
+        window.addEventListener('keydown', (e) => {
+            const currentTime = performance.now();
+            if (e.code === 'KeyE' && currentTime - lastGrabTime > 250) {
+                if (heldBox) {
+                    const dir = new THREE.Vector3();
+                    camera.getWorldDirection(dir);
+                    heldBox.velocity.copy(dir.multiplyScalar(0.6));
+                    heldBox = null;
+                } else {
+                    let closest = null;
+                    let minDist = holdDistance;
+                    boxes.forEach(box => {
+                        const d = camera.position.distanceTo(box.position);
+                        if (d < minDist) {
+                            minDist = d;
+                            closest = box;
+                        }
+                    });
+                    heldBox = closest;
+                }
+                lastGrabTime = currentTime;
+            }
+        });
+
+        const raycaster = new THREE.Raycaster();
+        window.addEventListener('mousedown', (e) => {
+            if (!controls.isLocked) return;
+            raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+            const hits = raycaster.intersectObjects(surfaces);
+            if (hits.length > 0) {
+                const p = (e.button === 0) ? bluePortal : orangePortal;
+                const hit = hits[0];
+                p.position.copy(hit.point).add(hit.face.normal.clone().multiplyScalar(0.1));
+                if (Math.abs(hit.face.normal.y) > 0.5) {
+                    p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), hit.face.normal);
+                } else {
+                    p.lookAt(hit.point.clone().add(hit.face.normal));
+                    p.rotateX(Math.PI/2);
+                }
+                p.facing.copy(hit.face.normal); 
+                p.visible = true;
+            }
+        });
+
+        // --- 6. Animation ---
+        function animate() {
+            requestAnimationFrame(animate);
+            if (controls.isLocked) {
+                // Player Physics
+                velocityY += gravity;
+                camera.position.y += velocityY;
+                if (camera.position.y <= eyeHeight) {
+                    camera.position.y = eyeHeight;
+                    velocityY = Math.max(0, velocityY);
+                    if (keys['Space']) velocityY = 0.3;
+                }
+                camera.position.add(velocityXZ);
+                velocityXZ.multiplyScalar(0.98);
+
+                const oldPos = camera.position.clone();
+                if (keys['KeyW']) controls.moveForward(0.18);
+                if (keys['KeyS']) controls.moveForward(-0.18);
+                if (keys['KeyA']) controls.moveRight(-0.18);
+                if (keys['KeyD']) controls.moveRight(0.18);
+
+                for (let wall of walls) {
+                    const wallBB = new THREE.Box3().setFromObject(wall);
+                    if (wallBB.expandByScalar(0.8).containsPoint(camera.position)) camera.position.copy(oldPos);
+                }
+
+                // Box Logic
+                let canPickSomething = false;
+                boxes.forEach(box => {
+                    if (heldBox === box) {
+                        const holdPos = camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(holdDistance));
+                        box.position.copy(holdPos);
+                        box.quaternion.copy(camera.quaternion);
+                        box.velocity.set(0, 0, 0);
+                    } else {
+                        if (box.position.y > 1) {
+                            box.velocity.y += gravity;
+                        } else {
+                            box.position.y = 1;
+                            box.velocity.y = 0;
+                            box.velocity.x *= 0.85; box.velocity.z *= 0.85;
+                        }
+                        box.position.add(box.velocity);
+                        box.velocity.multiplyScalar(0.99);
+
+                        if (bluePortal.visible && orangePortal.visible && box.canTeleport) {
+                            if (box.position.distanceTo(bluePortal.position) < 2.0) teleportObject(box, orangePortal, false);
+                            else if (box.position.distanceTo(orangePortal.position) < 2.0) teleportObject(box, bluePortal, false);
+                        }
+
+                        if (camera.position.distanceTo(box.position) < holdDistance) canPickSomething = true;
+                    }
+                });
+
+                // Update Crosshair Color
+                document.getElementById('crosshair').style.borderColor = canPickSomething ? "#ff00ff" : "#00ff00";
+
+                // Player Teleport
+                if (bluePortal.visible && orangePortal.visible && canTeleportPlayer) {
+                    if (camera.position.distanceTo(bluePortal.position) < 2.2) teleportObject(camera, orangePortal, true);
+                    else if (camera.position.distanceTo(orangePortal.position) < 2.2) teleportObject(camera, bluePortal, true);
+                }
+            }
+            renderer.render(scene, camera);
+        }
+
+        function teleportObject(obj, target, isPlayer) {
+            if (isPlayer) {
+                canTeleportPlayer = false;
+                setTimeout(() => { canTeleportPlayer = true; }, 700);
+            } else {
+                obj.canTeleport = false;
+                setTimeout(() => { obj.canTeleport = true; }, 700);
+            }
+
+            let speed = isPlayer ? (Math.abs(velocityY) + velocityXZ.length()) : obj.velocity.length();
+            if (speed < 0.2) speed = 0.2;
+            const fling = speed * 1.3;
+
+            if (Math.abs(target.facing.y) > 0.5) {
+                if (isPlayer) { velocityY = target.facing.y * fling; velocityXZ.set(0,0,0); }
+                else { obj.velocity.set(0, target.facing.y * fling, 0); }
+            } else {
+                if (isPlayer) { velocityXZ.copy(target.facing).multiplyScalar(fling); velocityY = 0.15; }
+                else { obj.velocity.copy(target.facing).multiplyScalar(fling); obj.velocity.y += 0.1; }
+            }
+
+            obj.position.copy(target.position).add(target.facing.clone().multiplyScalar(2.5));
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        camera.position.set(0, eyeHeight, 5);
+        animate();
+    </script>
+</body>
+</html>
+
