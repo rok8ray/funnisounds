@@ -25,6 +25,7 @@
         <b>Portal Puzzle: Level 1</b><br>
         1. The Glass Barrier blocks the way.<br>
         2. Fling the Cube onto the High Ledge.<br>
+        3. <b>Enter the Purple Zone to advance.</b><br>
         WASD: Move | SPACE: Jump | E: Grab/Throw
     </div>
 
@@ -55,6 +56,7 @@
         const eyeHeight = 1.6; 
         let canTeleportPlayer = true;
         let doorOpen = false;
+        let level = 1;
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -112,21 +114,40 @@
         surfaces.push(ceiling);
 
         // --- Puzzle Elements ---
-        // 1. The Glass Barrier (Blocks passage to the plate)
-        createWall(60, 20, 1, 0, 10, 0, glassMat);
+        createWall(40, 20, 1, 20, 10, 0, glassMat);
+        createWall(1, 20, 40, 0, 10, -20, glassMat);
 
-        // 2. The High Ledge (Plate location)
-        createWall(15, 2, 15, 15, 12, -20); 
+        // The High Ledge (Save to variable for level logic)
+        const ledge = createWall(15, 2, 15, 15, 12, -20); 
 
-        // 3. The Door (The exit)
         const door = createWall(12, 18, 2, -20, 9, -30, doorMat);
 
-        // 4. The Pressure Plate
         const plateGeo = new THREE.BoxGeometry(4, 0.2, 4);
         const plateMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
         const plate = new THREE.Mesh(plateGeo, plateMat);
         plate.position.set(15, 13.1, -20); 
         scene.add(plate);
+
+        // --- Inside // 5. The Level Exit (Purple Zone) ---
+        const exitGeo = new THREE.BoxGeometry(8, 14, 2); // Made it thinner like a door
+        const exitMat = new THREE.MeshBasicMaterial({ 
+            color: 0xaa00ff, 
+            transparent: true, 
+            opacity: 0.4,
+            side: THREE.DoubleSide 
+        });
+        const exitTrigger = new THREE.Mesh(exitGeo, exitMat);
+        
+        // MOVED POSITION: z: -31 ensures it is INSIDE the back wall (which is at -32.5)
+        exitTrigger.position.set(-20, 7, -31); 
+        scene.add(exitTrigger);
+
+        // Add a wireframe "Glow" to make it look like a portal
+        const wireframe = new THREE.LineSegments(
+            new THREE.EdgesGeometry(exitGeo),
+            new THREE.LineBasicMaterial({ color: 0xff00ff })
+        );
+        exitTrigger.add(wireframe);
 
         // --- 3. Boxes ---
         const boxGeo = new THREE.BoxGeometry(2, 2, 2);
@@ -275,6 +296,38 @@
                     doorOpen = false;
                 }
 
+                // --- Enhanced Level Transition Logic ---
+                if (camera.position.distanceTo(exitTrigger.position) < 5) {
+                    level++;
+                    
+                    // 1. Reset Player Position
+                    camera.position.set(0, eyeHeight, 20);
+                    velocityXZ.set(0, 0, 0);
+
+                    // 2. Procedural Difficulty: Move things around
+                    ledge.position.y += 2; // Make the jump harder
+                    plate.position.y += 2; 
+                    
+                    // Move the exit portal to a new corner each level
+                    const newX = (level % 2 === 0) ? 20 : -20;
+                    exitTrigger.position.x = newX;
+
+                    // 3. Visual Feedback: Change the "vibe" of the room
+                    scene.background = new THREE.Color(Math.random() * 0x333333);
+                    exitTrigger.material.color.setHSL(Math.random(), 1, 0.5);
+
+                    // 4. Reset Portals and Boxes
+                    bluePortal.visible = orangePortal.visible = false;
+                    boxes.forEach((box, i) => {
+                        box.position.set(Math.random() * 10 - 5, 5, Math.random() * 10);
+                        box.velocity.set(0, 0, 0);
+                    });
+
+                    // 5. Update UI
+                    document.querySelector('#instructions b').innerText = "Portal Puzzle: Level " + level;
+                    console.log("Advanced to Level " + level);
+                }
+
                 boxes.forEach(box => {
                     if (heldBox === box) {
                         const holdPos = camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(holdDistance));
@@ -327,7 +380,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        camera.position.set(0, eyeHeight, 20); // Start in the safe zone
+        camera.position.set(0, eyeHeight, 20); 
         animate();
     </script>
 </body>
