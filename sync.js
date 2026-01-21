@@ -20,7 +20,7 @@ async function sync() {
 
       writer.on('finish', () => {
         // 2. Push to GitHub after download
-        exec(`git add . && git commit -m "Auto-sync ${file}" && git push`, (err) => {
+        exec(`git add . && git commit -m "Auto-sync ${file}" && git pull && git push`, (err) => {
           if (!err) console.log(`${file} pushed to GitHub!`);
         });
       });
