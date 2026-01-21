@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>horse plinko</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #000; }
+        #ui { position: absolute; top: 120px; left: 10px; color: white; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; z-index: 10; border: 1px solid #444; text-wrap: wrap }
+        button { cursor: pointer; padding: 8px 12px; margin-bottom: 5px; background: #444; color: white; border: none; border-radius: 4px; width: 100%; }
+        button:hover { background: #666; }
+        .gif-overlay { pointer-events: none; z-index: 5; opacity: 0.8; position: absolute; width: 100%; height: 100px; }
+    </style>
+</head>
+<body>
+
+    <div id="html-overlays">
+        <img src="https://i.kym-cdn.com/photos/images/newsfeed/002/281/889/3d8.gifv" class="gif-overlay" style="top:0; left:0">
+        <img src="https://i.kym-cdn.com/photos/images/newsfeed/002/281/890/19f.gifv" class="gif-overlay" style="bottom:0; left:0;">
+    </div>
+
+    <div id="ui">
+        <button onclick="spawnHorse()">Spawn Horse</button><br>
+        <button onclick="togglePOV()">Toggle POV</button>
+        <p>POV: <span id="status">Global</span></p>
+    </div>
+
+    <script type="importmap">
+        { 
+            "imports": { 
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            } 
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // --- CONFIG ---
+        const USE_VIDEO_TEXTURES = true; 
+        const VIDEO_TOP_URL = "https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/horse%20plinko%20logo.mp4"; 
+        const VIDEO_BOTTOM_URL = "https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/fire.mp4";
+        // --------------
+
+        const HORSE_MODEL_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Horse.glb';
+        const PILL_RADIUS = 0.15; 
+        const PILL_HEIGHT = 0.4;
+        const HORSE_VISUAL_SCALE = 0.007;
+        const VIS = false; 
+        
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+        const dLight = new THREE.DirectionalLight(0xffffff, 2);
+        dLight.position.set(5, 10, 7);
+        scene.add(dLight);
+
+        // Track the billboard planes for the animate loop
+        const videoPlanes = [];
+
+        if (USE_VIDEO_TEXTURES) {
+            document.getElementById('html-overlays').style.display = 'none';
+
+            const createVideoPlane = (url, yPos) => {
+                const vid = document.createElement('video');
+                vid.src = url;
+                vid.loop = true; vid.muted = true; vid.crossOrigin = "anonymous"; vid.play();
+                
+                const tex = new THREE.VideoTexture(vid);
+                const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+                // Made them slightly larger for the distance
+                const mesh = new THREE.Mesh(new THREE.PlaneGeometry(40, 6), mat);
+                mesh.position.set(0, yPos, -10); // Pushed back away from the board
+                scene.add(mesh);
+                videoPlanes.push(mesh);
+            };
+
+            createVideoPlane(VIDEO_TOP_URL, 14);    
+            createVideoPlane(VIDEO_BOTTOM_URL, -14);
+        }
+
+        const gltfLoader = new GLTFLoader();
+        let horseModelTemplate = null;
+        gltfLoader.load(HORSE_MODEL_URL, (gltf) => {
+            horseModelTemplate = gltf.scene;
+            horseModelTemplate.scale.set(HORSE_VISUAL_SCALE, HORSE_VISUAL_SCALE, HORSE_VISUAL_SCALE);
+        });
+
+        const horses = [];
+        const pegs = [];
+        const clock = new THREE.Clock();
+        let isPOV = false;
+        let activeHorse = null;
+
+        const pegGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.8, 12);
+        const pegMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.7, roughness: 0.2 });
+        
+        for (let row = 0; row < 10; row++) {
+            for (let col = 0; col < 11; col++) {
+                const peg = new THREE.Mesh(pegGeo, pegMat);
+                const xOffset = (row % 2 === 0) ? 0.5 : 0;
+                peg.position.set(col - 5 + xOffset, 5 - row, 0);
+                peg.rotation.x = Math.PI / 2;
+                scene.add(peg);
+                pegs.push(peg.position);
+            }
+        }
+
+        window.spawnHorse = () => {
+            if (!horseModelTemplate) return;
+            const pillGeo = new THREE.CapsuleGeometry(PILL_RADIUS, PILL_HEIGHT, 4, 8);
+            const pillMat = new THREE.MeshBasicMaterial({ visible: VIS, color: 0xff0000, wireframe: true });
+            const pill = new THREE.Mesh(pillGeo, pillMat);
+            const visual = horseModelTemplate.clone();
+            pill.add(visual);
+            pill.position.set((Math.random() - 0.5) * 4, 9, 0);
+            
+            const horseData = { 
+                hitbox: pill, visual: visual, 
+                velocity: new THREE.Vector3((Math.random() - 0.5) * 0.05, 0, 0),
+                visualRotVel: new THREE.Vector3((Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1, (Math.random()-0.5)*0.15)
+            };
+            scene.add(pill);
+            horses.push(horseData);
+            activeHorse = horseData;
+        };
+
+        window.togglePOV = () => {
+            isPOV = !isPOV;
+            document.getElementById('status').innerText = isPOV ? "POV (Billboard Video Vision)" : "Global";
+        };
+
+        function animate() {
+            requestAnimationFrame(animate);
+            horses.forEach(h => {
+                h.velocity.y -= 0.008; 
+                h.hitbox.position.add(h.velocity);
+                h.visual.rotation.x += h.visualRotVel.x;
+                h.visual.rotation.y += h.visualRotVel.y;
+                h.visual.rotation.z += h.visualRotVel.z;
+                pegs.forEach(p => {
+                    if (h.hitbox.position.distanceTo(p) < (0.1 + PILL_RADIUS)) {
+                        const normal = new THREE.Vector3().subVectors(h.hitbox.position, p).normalize();
+                        h.velocity.reflect(normal).multiplyScalar(0.5); 
+                        h.hitbox.position.add(normal.multiplyScalar(0.12));
+                    }
+                });
+                if (h.hitbox.position.y < -10) {
+                    h.hitbox.position.set((Math.random() - 0.5) * 4, 9, 0);
+                    h.velocity.set(0, 0, 0);
+                }
+            });
+
+            if (isPOV && activeHorse) {
+                activeHorse.visual.visible = false;
+                camera.position.copy(activeHorse.hitbox.position);
+                camera.rotation.copy(activeHorse.visual.rotation);
+                camera.rotation.order = activeHorse.visual.rotation.order;
+            } else {
+                horses.forEach(h => h.visual.visible = true);
+                camera.rotation.set(0, 0, 0);
+                camera.position.lerp(new THREE.Vector3(0, 0, 15), 0.05);
+                camera.lookAt(0, 0, 0);
+            }
+
+            // BILLBOARD LOGIC: Make videos face the camera
+            videoPlanes.forEach(plane => {
+            	if (isPOV === true) {
+                	plane.lookAt(camera.position);
+                } else {
+                	plane.lookAt(0, plane.position.y, 0);
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+        animate();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
