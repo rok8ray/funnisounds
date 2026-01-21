@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JS Pro Exporter</title>
+    <style>
+        :root { --primary: #4285f4; --bg: #1e1e1e; --text: #ffffff; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #121212; color: var(--text); line-height: 1.6; }
+        .container { max-width: 900px; margin: auto; background: var(--bg); padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h2 { margin-top: 0; color: var(--primary); }
+        textarea { width: 100%; height: 400px; background: #2d2d2d; color: #d4d4d4; border: 1px solid #444; border-radius: 8px; padding: 15px; font-family: 'Consolas', monospace; resize: vertical; box-sizing: border-box; }
+        .stats { font-size: 0.85rem; color: #888; margin-bottom: 10px; text-align: right; }
+        .controls { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; align-items: center; }
+        input { background: #2d2d2d; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; flex-grow: 1; }
+        button { padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-export { background: var(--primary); color: white; }
+        .btn-export:hover { background: #357ae8; transform: translateY(-1px); }
+        .btn-clear { background: #444; color: #ccc; }
+        .btn-clear:hover { background: #555; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>JS Pro Exporter</h2>
+    <div class="stats">Characters: <span id="charCount">0</span> | Lines: <span id="lineCount">0</span></div>
+    
+    <textarea id="jsCode" placeholder="// Paste your code or long strings here..." oninput="updateStats()"></textarea>
+    
+    <div class="controls">
+        <input type="text" id="fileName" placeholder="file_name" value="payload">
+        <select id="fileType" style="background:#2d2d2d; color:white; padding:10px; border-radius:6px; border:1px solid #444;">
+            <option value="js">.js</option>
+            <option value="txt">.txt</option>
+            <option value="html">.html</option>
+        </select>
+        <button class="btn-clear" onclick="clearAll()">Clear</button>
+        <button class="btn-export" onclick="exportFile()">Download File</button>
+    </div>
+</div>
+
+<script>
+    function updateStats() {
+        const text = document.getElementById('jsCode').value;
+        document.getElementById('charCount').innerText = text.length.toLocaleString();
+        document.getElementById('lineCount').innerText = text.split('\n').length;
+    }
+
+    function clearAll() {
+        if(confirm("Clear all text?")) {
+            document.getElementById('jsCode').value = "";
+            updateStats();
+        }
+    }
+
+    function exportFile() {
+        const code = document.getElementById('jsCode').value;
+        const name = document.getElementById('fileName').value || 'file';
+        const ext = document.getElementById('fileType').value;
+        
+        const blob = new Blob([code], {type: 'text/plain'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${name}.${ext}`;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+
+<script src="https://replit-cdn.com/replit-pill/replit-pill.global.js" data-repl-id="d91cfdb4-b883-460d-9bf3-71de208e4ed6"></script></body>
+</html>
