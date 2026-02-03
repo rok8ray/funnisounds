@@ -2,20 +2,39 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iCar Speed Prototype</title>
+    <title>iCar Pro - High Speed Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Courier New', monospace; }
-        #ui { position: fixed; top: 20px; left: 20px; color: #00ffcc; pointer-events: none; }
-        #speedometer { font-size: 5rem; font-weight: bold; text-shadow: 0 0 20px #00ffcc; }
-        .stats { font-size: 1.2rem; color: #ff00ff; }
+        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Courier New', Courier, monospace; }
+        #ui { 
+            position: fixed; top: 20px; left: 20px; color: white; pointer-events: none; 
+            text-shadow: 2px 2px 0px #ff00ff; z-index: 10;
+        }
+        #speedometer { font-size: 4rem; font-weight: bold; color: #00ffcc; }
+        .label { font-size: 1rem; color: #ff00ff; }
+        .controls { margin-top: 10px; font-size: 0.8rem; color: #aaa; line-height: 1.5; }
+        #nitro-bar { width: 200px; height: 10px; background: #222; margin-top: 5px; border: 1px solid #444; }
+        #nitro-fill { width: 100%; height: 100%; background: #00ffcc; transition: width 0.1s; }
+        
+        /* Scanline effect for that retro vibe */
+        body::after {
+            content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2; background-size: 100% 2px, 3px 100%; pointer-events: none;
+        }
     </style>
 </head>
 <body>
     <div id="ui">
-        <div class="stats">KM/H</div>
+        <div class="label">SPEED</div>
         <div id="speedometer">000</div>
-        <div style="color:white; opacity:0.6;">WASD: Drive | SHIFT: Nitro | R: Reset</div>
+        <div class="label">NITRO (L-SHIFT)</div>
+        <div id="nitro-bar"><div id="nitro-fill"></div></div>
+        <div class="controls">
+            WASD / ARROWS: DRIVE<br>
+            SPACE: HANDBRAKE<br>
+            SHIFT: NITRO BOOST<br>
+            R: RESET CAR
+        </div>
     </div>
 
     <script type="importmap">
@@ -31,90 +50,156 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+        // --- Scene & Camera ---
         const scene = new THREE.Scene();
-        scene.fog = new THREE.Fog(0x050505, 20, 100);
+        scene.background = new THREE.Color(0x050505);
+        scene.fog = new THREE.Fog(0x050505, 20, 150);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        const sun = new THREE.DirectionalLight(0xffffff, 2);
+        // --- Lighting ---
+        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambient);
+        const sun = new THREE.DirectionalLight(0x00ffff, 1.5);
         sun.position.set(10, 20, 10);
         scene.add(sun);
 
-        const grid = new THREE.GridHelper(2000, 100, 0xff00ff, 0x222222);
+        // --- Built-in Track Geometry ---
+        // Grid Floor
+        const grid = new THREE.GridHelper(1000, 150, 0xff00ff, 0x222222);
         scene.add(grid);
 
-        // --- FAST PHYSICS ---
-        const carState = { velocity: 0, acc: 0.02, friction: 0.99, angle: 0 };
-        const keys = { w:false, s:false, a:false, d:false, shift:false };
+        // Neon Pillars (Our "Track" obstacles)
+        const pillarGeo = new THREE.BoxGeometry(4, 30, 4);
+        for(let i = 0; i < 60; i++) {
+            const pillarMat = new THREE.MeshPhongMaterial({ 
+                color: 0x00ffcc, 
+                wireframe: true,
+                emissive: 0x004444
+            });
+            const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+            pillar.position.set((Math.random()-0.5)*300, 15, (Math.random()-0.5)*300);
+            scene.add(pillar);
+        }
+
+        // --- Car Physics State ---
+        const carState = {
+            velocity: 0,
+            acceleration: 0.015,
+            friction: 0.985,
+            nitroMult: 2.2,
+            nitroAmount: 100,
+            angle: 0,
+            maxSpeed: 1.5
+        };
+
+        const keys = { w:false, s:false, a:false, d:false, shift:false, space:false };
         const carGroup = new THREE.Group();
         scene.add(carGroup);
 
-        // Dummy Car
-        const dummy = new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 2), new THREE.MeshPhongMaterial({ color: 0x00ffcc }));
-        dummy.position.y = 0.25;
-        carGroup.add(dummy);
+        // Fallback placeholder (Red Box)
+        const dummyMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(1.2, 0.5, 2.5),
+            new THREE.MeshPhongMaterial({ color: 0xff0055 })
+        );
+        dummyMesh.position.y = 0.25;
+        carGroup.add(dummyMesh);
 
-        // --- LOAD MODEL ---
+        // --- GLTF Loader ---
         const loader = new GLTFLoader();
-        // PASTE YOUR CORRECTED LINK HERE:
-        const modelURL = 'https://raw.githubusercontent.com/rok8ray/liquidglasspg/refs/heads/main/threejs_basics/icar/iCar.glb';
-
-        loader.load(modelURL, (gltf) => {
-            carGroup.remove(dummy);
-            gltf.scene.scale.set(10, 10, 10);
+loader.load('https://raw.githubusercontent.com/rok8ray/liquidglasspg/refs/heads/main/threejs_basics/icar/iCar.glb', (gltf) => {
+            carGroup.remove(dummyMesh);
+gltf.scene.scale.set(10, 10, 10);
             carGroup.add(gltf.scene);
-        }, undefined, () => {
-            console.error("Link is still 404. Using placeholder.");
         });
 
-        window.addEventListener('keydown', (e) => { 
-            if(e.key === 'Shift') keys.shift = true;
-            if(e.key.toLowerCase() === 'r') { carGroup.position.set(0,0,0); carState.velocity = 0; }
-            if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; 
+        // --- Controls ---
+        window.addEventListener('keydown', (e) => {
+            const k = e.key.toLowerCase();
+            if (k === ' ') keys.space = true;
+            if (k === 'shift') keys.shift = true;
+            if (k === 'r') resetCar();
+            if (keys.hasOwnProperty(k)) keys[k] = true;
+            if (e.key === "ArrowUp") keys.w = true;
+            if (e.key === "ArrowDown") keys.s = true;
+            if (e.key === "ArrowLeft") keys.a = true;
+            if (e.key === "ArrowRight") keys.d = true;
         });
-        window.addEventListener('keyup', (e) => { 
-            if(e.key === 'Shift') keys.shift = false;
-            if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; 
+        window.addEventListener('keyup', (e) => {
+            const k = e.key.toLowerCase();
+            if (k === ' ') keys.space = false;
+            if (k === 'shift') keys.shift = false;
+            if (keys.hasOwnProperty(k)) keys[k] = false;
+            if (e.key === "ArrowUp") keys.w = false;
+            if (e.key === "ArrowDown") keys.s = false;
+            if (e.key === "ArrowLeft") keys.a = false;
+            if (e.key === "ArrowRight") keys.d = false;
         });
+
+        function resetCar() {
+            carGroup.position.set(0,0,0);
+            carState.velocity = 0;
+            carState.angle = 0;
+        }
+
+        // --- Main Game Loop ---
+        const speedEl = document.getElementById('speedometer');
+        const nitroFill = document.getElementById('nitro-fill');
 
         function animate() {
             requestAnimationFrame(animate);
 
-            let power = keys.shift ? carState.acc * 3 : carState.acc;
-            if (keys.w) carState.velocity += power;
-            if (keys.s) carState.velocity -= carState.acc;
-            
+            // Physics logic
+            let currentAcc = carState.acceleration;
+            if (keys.shift && carState.nitroAmount > 0 && keys.w) {
+                currentAcc *= carState.nitroMult;
+                carState.nitroAmount -= 0.5;
+            } else if (carState.nitroAmount < 100) {
+                carState.nitroAmount += 0.1;
+            }
+
+            if (keys.w) carState.velocity += currentAcc;
+            if (keys.s) carState.velocity -= currentAcc;
+
+            if (keys.space) carState.velocity *= 0.93;
             carState.velocity *= carState.friction;
 
-            if (Math.abs(carState.velocity) > 0.01) {
+            // Steering
+            if (Math.abs(carState.velocity) > 0.005) {
                 const dir = carState.velocity > 0 ? 1 : -1;
-                if (keys.a) carState.angle += 0.04 * dir;
-                if (keys.d) carState.angle -= 0.04 * dir;
+                const turnSpeed = 0.04;
+                if (keys.a) carState.angle += turnSpeed * dir;
+                if (keys.d) carState.angle -= turnSpeed * dir;
             }
 
             carGroup.rotation.y = carState.angle;
             carGroup.position.x += Math.sin(carState.angle) * carState.velocity;
             carGroup.position.z += Math.cos(carState.angle) * carState.velocity;
 
-            const offset = new THREE.Vector3(0, 2, -6).applyQuaternion(carGroup.quaternion);
-            camera.position.lerp(carGroup.position.clone().add(offset), 0.1);
+            // Camera Smoothing
+            const camPos = new THREE.Vector3(0, 3, -7).applyQuaternion(carGroup.quaternion).add(carGroup.position);
+            camera.position.lerp(camPos, 0.1);
             camera.lookAt(carGroup.position);
 
-            document.getElementById('speedometer').innerText = Math.floor(Math.abs(carState.velocity) * 400).toString().padStart(3, '0');
+            // UI
+            const displaySpeed = Math.floor(Math.abs(carState.velocity) * 650);
+            speedEl.innerText = displaySpeed.toString().padStart(3, '0');
+            nitroFill.style.width = carState.nitroAmount + "%";
+
             renderer.render(scene, camera);
         }
         animate();
 
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
     </script>
 </body>
 </html>
+
