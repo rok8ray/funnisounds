@@ -201,7 +201,7 @@
                     chaser.position.y = fixedY; 
                 }
             } else if (isDead) {
-                camera.lookAt(chaser.position.x, chaser.position.y, chaser.position.z);
+                camera.lerp(chaser.position.x, chaser.position.y, chaser.position.z);
             }
             renderer.render(scene, camera);
         }
