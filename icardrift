@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iCar Speed Prototype</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Courier New', monospace; }
+        #ui { position: fixed; top: 20px; left: 20px; color: #00ffcc; pointer-events: none; }
+        #speedometer { font-size: 5rem; font-weight: bold; text-shadow: 0 0 20px #00ffcc; }
+        .stats { font-size: 1.2rem; color: #ff00ff; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div class="stats">KM/H</div>
+        <div id="speedometer">000</div>
+        <div style="color:white; opacity:0.6;">WASD: Drive | SHIFT: Nitro | R: Reset</div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x050505, 20, 100);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        const sun = new THREE.DirectionalLight(0xffffff, 2);
+        sun.position.set(10, 20, 10);
+        scene.add(sun);
+
+        const grid = new THREE.GridHelper(2000, 100, 0xff00ff, 0x222222);
+        scene.add(grid);
+
+        // --- FAST PHYSICS ---
+        const carState = { velocity: 0, acc: 0.02, friction: 0.99, angle: 0 };
+        const keys = { w:false, s:false, a:false, d:false, shift:false };
+        const carGroup = new THREE.Group();
+        scene.add(carGroup);
+
+        // Dummy Car
+        const dummy = new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 2), new THREE.MeshPhongMaterial({ color: 0x00ffcc }));
+        dummy.position.y = 0.25;
+        carGroup.add(dummy);
+
+        // --- LOAD MODEL ---
+        const loader = new GLTFLoader();
+        // PASTE YOUR CORRECTED LINK HERE:
+        const modelURL = 'https://raw.githubusercontent.com/rok8ray/liquidglasspg/refs/heads/main/threejs_basics/icar/iCar.glb';
+
+        loader.load(modelURL, (gltf) => {
+            carGroup.remove(dummy);
+            gltf.scene.scale.set(10, 10, 10);
+            carGroup.add(gltf.scene);
+        }, undefined, () => {
+            console.error("Link is still 404. Using placeholder.");
+        });
+
+        window.addEventListener('keydown', (e) => { 
+            if(e.key === 'Shift') keys.shift = true;
+            if(e.key.toLowerCase() === 'r') { carGroup.position.set(0,0,0); carState.velocity = 0; }
+            if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; 
+        });
+        window.addEventListener('keyup', (e) => { 
+            if(e.key === 'Shift') keys.shift = false;
+            if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; 
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            let power = keys.shift ? carState.acc * 3 : carState.acc;
+            if (keys.w) carState.velocity += power;
+            if (keys.s) carState.velocity -= carState.acc;
+            
+            carState.velocity *= carState.friction;
+
+            if (Math.abs(carState.velocity) > 0.01) {
+                const dir = carState.velocity > 0 ? 1 : -1;
+                if (keys.a) carState.angle += 0.04 * dir;
+                if (keys.d) carState.angle -= 0.04 * dir;
+            }
+
+            carGroup.rotation.y = carState.angle;
+            carGroup.position.x += Math.sin(carState.angle) * carState.velocity;
+            carGroup.position.z += Math.cos(carState.angle) * carState.velocity;
+
+            const offset = new THREE.Vector3(0, 2, -6).applyQuaternion(carGroup.quaternion);
+            camera.position.lerp(carGroup.position.clone().add(offset), 0.1);
+            camera.lookAt(carGroup.position);
+
+            document.getElementById('speedometer').innerText = Math.floor(Math.abs(carState.velocity) * 400).toString().padStart(3, '0');
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
