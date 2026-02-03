@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RUN FROM JOB 😱😱🥶 | update</title>
+    <title>RUN FROM JOB 😱😱🥶</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
         #ui {
@@ -47,6 +47,13 @@
         <button id="restart-btn">respawn</button>
     </div>
 
+    <audio id="bg-music" loop>
+        <source src="https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/audio/07%20-%20The%20Chase.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="death-sound">
+        <source src="https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/audio/spongesad.mp3" type="audio/mpeg">
+    </audio>
+
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
     </script>
@@ -61,6 +68,8 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
+        const music = document.getElementById('bg-music');
+        const sfx = document.getElementById('death-sound');
         const ambient = new THREE.AmbientLight(0xffffff, 1.4); 
         scene.add(ambient);
 
@@ -118,15 +127,21 @@
             player.position.set(0, 1.7, 0);
             chaser.position.set(60, fixedY, 60);
             document.getElementById('game-over-screen').style.display = 'none';
+            music.currentTime = 0;
+            music.play();
             document.body.requestPointerLock();
         }
 
-        document.getElementById('start-btn').addEventListener('click', () => document.body.requestPointerLock());
+        document.getElementById('start-btn').addEventListener('click', () => {
+            document.body.requestPointerLock();
+            music.play();
+        });
         document.getElementById('restart-btn').addEventListener('click', resetGame);
         
         document.addEventListener('pointerlockchange', () => {
             isLocked = document.pointerLockElement === document.body;
             if (!isDead) document.getElementById('instructions').style.display = isLocked ? 'none' : 'flex';
+            if (isLocked && !isDead) music.play(); else music.pause();
         });
 
         window.addEventListener('keydown', (e) => keys[e.code] = true);
@@ -180,6 +195,8 @@
 
                 if (playerBox.intersectsBox(chaserBox)) { 
                     isDead = true;
+                    music.pause();
+                    sfx.play();
                     document.exitPointerLock();
                     document.getElementById('game-over-screen').style.display = 'flex';
                     document.getElementById('final-score').innerText = Math.floor(score);
@@ -198,7 +215,6 @@
                     chaser.position.y = fixedY; 
                 }
             } else if (isDead) {
-                // Fixed the broken lerp line here:
                 const deathCamPos = new THREE.Vector3(chaser.position.x, player.position.y + 12, chaser.position.z);
                 camera.position.lerp(deathCamPos, 0.05);
                 camera.lookAt(chaser.position);
