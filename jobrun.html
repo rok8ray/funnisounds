@@ -2,214 +2,203 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CAREER STALKER 3D</title>
+    <title>iCar Pro - High Speed Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
+        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Courier New', Courier, monospace; }
+        #ui { 
+            position: fixed; top: 20px; left: 20px; color: white; pointer-events: none; 
+            text-shadow: 2px 2px 0px #ff00ff; z-index: 10;
+        }
+        #speedometer { font-size: 4rem; font-weight: bold; color: #00ffcc; }
+        .label { font-size: 1rem; color: #ff00ff; }
+        .controls { margin-top: 10px; font-size: 0.8rem; color: #aaa; line-height: 1.5; }
+        #nitro-bar { width: 200px; height: 10px; background: #222; margin-top: 5px; border: 1px solid #444; }
+        #nitro-fill { width: 100%; height: 100%; background: #00ffcc; transition: width 0.1s; }
         
-        /* UI Overlay */
-        #ui {
-            position: absolute; top: 20px; left: 20px; color: #0f0; 
-            text-shadow: 2px 2px #000; pointer-events: none; z-index: 5;
+        /* Scanline effect for that retro vibe */
+        body::after {
+            content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2; background-size: 100% 2px, 3px 100%; pointer-events: none;
         }
-        #stamina-container {
-            width: 200px; height: 10px; border: 1px solid #0f0; margin-top: 10px;
-        }
-        #stamina-bar { width: 100%; height: 100%; background: #0f0; }
-
-        /* Start Screen */
-        #instructions {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            background: rgba(0,0,0,0.85); color: white; text-align: center; z-index: 20;
-        }
-        button {
-            padding: 15px 30px; font-size: 18px; cursor: pointer; 
-            background: #0f0; border: none; font-family: inherit; font-weight: bold;
-        }
-        button:hover { background: #0a0; }
-
-        /* Game Over Screen */
-        #game-over-screen {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: none; flex-direction: column; align-items: center; justify-content: center;
-            background: rgba(100, 0, 0, 0.9); color: white; z-index: 30;
-        }
-        #game-over-screen h1 { font-size: 70px; margin-bottom: 0; }
     </style>
 </head>
 <body>
-
     <div id="ui">
-        <div>DEBT AVOIDED: <span id="score">0</span>s</div>
-        <div id="stamina-container"><div id="stamina-bar"></div></div>
-        <div style="font-size: 10px; margin-top: 5px;">[WASD] MOVE | [SHIFT] SPRINT</div>
-    </div>
-
-    <div id="instructions">
-        <h1>CAREER STALKER</h1>
-        <p>Don't let the job application touch you. STAY UNEMPLOYED.</p>
-        <button id="start-btn">ACCEPT OFFER (START)</button>
-    </div>
-
-    <div id="game-over-screen">
-        <h1>YOU'RE HIRED.</h1>
-        <p>You survived for <span id="final-score">0</span> seconds before signing.</p>
-        <button onclick="location.reload()">TRY TO RESIGN (RESTART)</button>
+        <div class="label">SPEED</div>
+        <div id="speedometer">000</div>
+        <div class="label">NITRO (L-SHIFT)</div>
+        <div id="nitro-bar"><div id="nitro-fill"></div></div>
+        <div class="controls">
+            WASD / ARROWS: DRIVE<br>
+            SPACE: HANDBRAKE<br>
+            SHIFT: NITRO BOOST<br>
+            R: RESET CAR
+        </div>
     </div>
 
     <script type="importmap">
-        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
     </script>
 
     <script type="module">
         import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // --- SCENE SETUP ---
+        // --- Scene & Camera ---
         const scene = new THREE.Scene();
-        scene.fog = new THREE.Fog(0x000000, 5, 25);
-        
+        scene.background = new THREE.Color(0x050505);
+        scene.fog = new THREE.Fog(0x050505, 20, 150);
+
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // --- LIGHTING ---
-        const ambient = new THREE.AmbientLight(0x404040, 0.5); 
+        // --- Lighting ---
+        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
         scene.add(ambient);
+        const sun = new THREE.DirectionalLight(0x00ffff, 1.5);
+        sun.position.set(10, 20, 10);
+        scene.add(sun);
 
-        const flashLight = new THREE.SpotLight(0xffffff, 100);
-        flashLight.angle = 0.5;
-        flashLight.penumbra = 0.3;
-        scene.add(flashLight);
-        scene.add(flashLight.target);
-
-        // --- WORLD OBJECTS ---
-        const grid = new THREE.GridHelper(500, 100, 0x00ff00, 0x222222);
+        // --- Built-in Track Geometry ---
+        // Grid Floor
+        const grid = new THREE.GridHelper(1000, 150, 0xff00ff, 0x222222);
         scene.add(grid);
 
-        // Player (Green Cube)
-        const player = new THREE.Mesh(
-            new THREE.BoxGeometry(0.6, 1.2, 0.6),
-            new THREE.MeshStandardMaterial({ color: 0x00ff00 })
+        // Neon Pillars (Our "Track" obstacles)
+        const pillarGeo = new THREE.BoxGeometry(4, 30, 4);
+        for(let i = 0; i < 60; i++) {
+            const pillarMat = new THREE.MeshPhongMaterial({ 
+                color: 0x00ffcc, 
+                wireframe: true,
+                emissive: 0x004444
+            });
+            const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+            pillar.position.set((Math.random()-0.5)*300, 15, (Math.random()-0.5)*300);
+            scene.add(pillar);
+        }
+
+        // --- Car Physics State ---
+        const carState = {
+            velocity: 0,
+            acceleration: 0.015,
+            friction: 0.985,
+            nitroMult: 2.2,
+            nitroAmount: 100,
+            angle: 0,
+            maxSpeed: 1.5
+        };
+
+        const keys = { w:false, s:false, a:false, d:false, shift:false, space:false };
+        const carGroup = new THREE.Group();
+        scene.add(carGroup);
+
+        // Fallback placeholder (Red Box)
+        const dummyMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(1.2, 0.5, 2.5),
+            new THREE.MeshPhongMaterial({ color: 0xff0055 })
         );
-        player.position.y = 0.6;
-        scene.add(player);
+        dummyMesh.position.y = 0.25;
+        carGroup.add(dummyMesh);
 
-        // Chaser (The Job Application)
-        const loader = new THREE.TextureLoader();
-        const chaserMat = new THREE.MeshStandardMaterial({ 
-            map: loader.load('https://eforms.com/images/2018/03/Employment-Job-Application-791x1024.png'),
-            transparent: true,
-            side: THREE.DoubleSide
-        });
-        const chaser = new THREE.Mesh(new THREE.PlaneGeometry(2, 2.6), chaserMat);
-        chaser.position.set(15, 1.3, 15);
-        scene.add(chaser);
-
-        // --- GAME LOGIC ---
-        let isLocked = false;
-        let isDead = false;
-        let stamina = 100;
-        let score = 0;
-        let yaw = 0;
-        let chaserSpeed = 0.08;
-        const keys = {};
-
-        const startBtn = document.getElementById('start-btn');
-        const instructions = document.getElementById('instructions');
-        const gameOverScreen = document.getElementById('game-over-screen');
-
-        // Mouse Lock
-        startBtn.addEventListener('click', () => document.body.requestPointerLock());
-        
-        document.addEventListener('pointerlockchange', () => {
-            isLocked = document.pointerLockElement === document.body;
-            if (!isDead) instructions.style.display = isLocked ? 'none' : 'flex';
+        // --- GLTF Loader ---
+        const loader = new GLTFLoader();
+loader.load('https://raw.githubusercontent.com/rok8ray/liquidglasspg/refs/heads/main/threejs_basics/icar/iCar.glb', (gltf) => {
+            carGroup.remove(dummyMesh);
+gltf.scene.scale.set(10, 10, 10);
+            carGroup.add(gltf.scene);
         });
 
-        window.addEventListener('keydown', (e) => keys[e.code] = true);
-        window.addEventListener('keyup', (e) => keys[e.code] = false);
-        document.addEventListener('mousemove', (e) => {
-            if (isLocked && !isDead) yaw -= e.movementX * 0.002;
+        // --- Controls ---
+        window.addEventListener('keydown', (e) => {
+            const k = e.key.toLowerCase();
+            if (k === ' ') keys.space = true;
+            if (k === 'shift') keys.shift = true;
+            if (k === 'r') resetCar();
+            if (keys.hasOwnProperty(k)) keys[k] = true;
+            if (e.key === "ArrowUp") keys.w = true;
+            if (e.key === "ArrowDown") keys.s = true;
+            if (e.key === "ArrowLeft") keys.a = true;
+            if (e.key === "ArrowRight") keys.d = true;
         });
+        window.addEventListener('keyup', (e) => {
+            const k = e.key.toLowerCase();
+            if (k === ' ') keys.space = false;
+            if (k === 'shift') keys.shift = false;
+            if (keys.hasOwnProperty(k)) keys[k] = false;
+            if (e.key === "ArrowUp") keys.w = false;
+            if (e.key === "ArrowDown") keys.s = false;
+            if (e.key === "ArrowLeft") keys.a = false;
+            if (e.key === "ArrowRight") keys.d = false;
+        });
+
+        function resetCar() {
+            carGroup.position.set(0,0,0);
+            carState.velocity = 0;
+            carState.angle = 0;
+        }
+
+        // --- Main Game Loop ---
+        const speedEl = document.getElementById('speedometer');
+        const nitroFill = document.getElementById('nitro-fill');
 
         function animate() {
             requestAnimationFrame(animate);
 
-            if (isLocked && !isDead) {
-                // 1. Scoring & Difficulty
-                score += 1/60;
-                chaserSpeed += 0.00002;
-                document.getElementById('score').innerText = Math.floor(score);
-
-                // 2. Stamina & Speed
-                let currentSpeed = 0.12;
-                if (keys['ShiftLeft'] && stamina > 1) {
-                    currentSpeed = 0.22;
-                    stamina -= 0.5;
-                } else {
-                    if (stamina < 100) stamina += 0.2;
-                }
-                document.getElementById('stamina-bar').style.width = stamina + '%';
-
-                // 3. Player Movement
-                player.rotation.y = yaw;
-                const moveVec = new THREE.Vector3();
-                if (keys['KeyW']) moveVec.z -= 1;
-                if (keys['KeyS']) moveVec.z += 1;
-                if (keys['KeyA']) moveVec.x -= 1;
-                if (keys['KeyD']) moveVec.x += 1;
-                
-                moveVec.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-                player.position.addScaledVector(moveVec, currentSpeed);
-
-                // 4. Camera Follow (3rd Person)
-                const camOffset = new THREE.Vector3(0, 3, 6).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-                camera.position.lerp(player.position.clone().add(camOffset), 0.1);
-                camera.lookAt(player.position);
-
-                // 5. Flashlight follow
-                flashLight.position.copy(player.position).y += 1.5;
-                const targetOffset = new THREE.Vector3(0, 0, -10).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-                flashLight.target.position.copy(player.position).add(targetOffset);
-
-                // 6. Chaser AI
-                const toPlayer = new THREE.Vector3().subVectors(player.position, chaser.position);
-                toPlayer.y = 0;
-                
-                // Collision Check
-                if (toPlayer.length() < 1.1) {
-                    endGame();
-                } else {
-                    chaser.position.addScaledVector(toPlayer.normalize(), chaserSpeed);
-                    chaser.lookAt(player.position.x, 1.3, player.position.z);
-                    chaser.position.y = 1.3 + Math.sin(Date.now() * 0.005) * 0.3; // Floating effect
-                }
+            // Physics logic
+            let currentAcc = carState.acceleration;
+            if (keys.shift && carState.nitroAmount > 0 && keys.w) {
+                currentAcc *= carState.nitroMult;
+                carState.nitroAmount -= 0.5;
+            } else if (carState.nitroAmount < 100) {
+                carState.nitroAmount += 0.1;
             }
+
+            if (keys.w) carState.velocity += currentAcc;
+            if (keys.s) carState.velocity -= currentAcc;
+
+            if (keys.space) carState.velocity *= 0.93;
+            carState.velocity *= carState.friction;
+
+            // Steering
+            if (Math.abs(carState.velocity) > 0.005) {
+                const dir = carState.velocity > 0 ? 1 : -1;
+                const turnSpeed = 0.04;
+                if (keys.a) carState.angle += turnSpeed * dir;
+                if (keys.d) carState.angle -= turnSpeed * dir;
+            }
+
+            carGroup.rotation.y = carState.angle;
+            carGroup.position.x += Math.sin(carState.angle) * carState.velocity;
+            carGroup.position.z += Math.cos(carState.angle) * carState.velocity;
+
+            // Camera Smoothing
+            const camPos = new THREE.Vector3(0, 3, -7).applyQuaternion(carGroup.quaternion).add(carGroup.position);
+            camera.position.lerp(camPos, 0.1);
+            camera.lookAt(carGroup.position);
+
+            // UI
+            const displaySpeed = Math.floor(Math.abs(carState.velocity) * 650);
+            speedEl.innerText = displaySpeed.toString().padStart(3, '0');
+            nitroFill.style.width = carState.nitroAmount + "%";
 
             renderer.render(scene, camera);
         }
-
-        function endGame() {
-            isDead = true;
-            document.exitPointerLock();
-            gameOverScreen.style.display = 'flex';
-            document.getElementById('final-score').innerText = Math.floor(score);
-            
-            // Dramatic Death Zoom
-            camera.position.set(chaser.position.x, chaser.position.y + 1, chaser.position.z + 3);
-            camera.lookAt(chaser.position);
-        }
+        animate();
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-
-        animate();
     </script>
 </body>
 </html>
