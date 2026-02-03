@@ -175,10 +175,8 @@
                 camera.rotation.order = "YXZ";
                 camera.rotation.set(pitch, yaw, 0);
 
-                // --- PRECISION HITBOX ---
-                // Shrunk player collision box to 0.8 and chaser's active lethal depth to 1
                 playerBox.setFromCenterAndSize(player.position, new THREE.Vector3(0.8, 2, 0.8));
-                chaserBox.setFromCenterAndSize(chaser.position, new THREE.Vector3(9, 12, 1)); 
+                chaserBox.setFromCenterAndSize(chaser.position, new THREE.Vector3(9, 12, 1.5)); 
 
                 if (playerBox.intersectsBox(chaserBox)) { 
                     isDead = true;
@@ -187,13 +185,12 @@
                     document.getElementById('final-score').innerText = Math.floor(score);
                 } else {
                     const dir = new THREE.Vector3().subVectors(player.position, chaser.position).normalize();
-                    
                     raycaster.set(chaser.position, dir);
                     const intersects = raycaster.intersectObjects(walls);
                     
                     let finalSpeed = stalkerSpeed;
                     if (intersects.length > 0 && intersects[0].distance < 4) {
-                        finalSpeed *= 0.4; // Slow phasing
+                        finalSpeed *= 0.4;
                     }
 
                     chaser.position.addScaledVector(dir, finalSpeed);
@@ -201,8 +198,10 @@
                     chaser.position.y = fixedY; 
                 }
             } else if (isDead) {
-                camera.position.lerp(chaser.position.x, (player.position.y + 10), chaser.position.z);
-                camera.lookAt(chaser.position.x, chaser.position.y, chaser.position.z);
+                // Fixed the broken lerp line here:
+                const deathCamPos = new THREE.Vector3(chaser.position.x, player.position.y + 12, chaser.position.z);
+                camera.position.lerp(deathCamPos, 0.05);
+                camera.lookAt(chaser.position);
             }
             renderer.render(scene, camera);
         }
