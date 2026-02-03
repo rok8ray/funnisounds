@@ -3,59 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CAREER STALKER 3D</title>
+    <title>CAREER STALKER: PRECISION HITBOX</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
-        
-        /* UI Overlay */
         #ui {
             position: absolute; top: 20px; left: 20px; color: #0f0; 
             text-shadow: 2px 2px #000; pointer-events: none; z-index: 5;
         }
-        #stamina-container {
-            width: 200px; height: 10px; border: 1px solid #0f0; margin-top: 10px;
-        }
+        #stamina-container { width: 200px; height: 10px; border: 1px solid #0f0; margin-top: 10px; }
         #stamina-bar { width: 100%; height: 100%; background: #0f0; }
-
-        /* Start Screen */
-        #instructions {
+        .overlay-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            background: rgba(0,0,0,0.85); color: white; text-align: center; z-index: 20;
+            text-align: center; color: white; z-index: 20;
         }
-        button {
-            padding: 15px 30px; font-size: 18px; cursor: pointer; 
-            background: #0f0; border: none; font-family: inherit; font-weight: bold;
+        #instructions { background: rgba(0,0,0,0.9); }
+        #game-over-screen { background: rgba(150, 0, 0, 0.9); display: none; }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #0f0; border: none; font-family: inherit; font-weight: bold; margin-top: 20px; }
+        h1 { font-size: 60px; margin: 0; text-shadow: 4px 4px #000; }
+        #reticle { 
+            position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; 
+            background: rgba(0, 255, 0, 0.5); border-radius: 50%; pointer-events: none;
         }
-        button:hover { background: #0a0; }
-
-        /* Game Over Screen */
-        #game-over-screen {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: none; flex-direction: column; align-items: center; justify-content: center;
-            background: rgba(100, 0, 0, 0.9); color: white; z-index: 30;
-        }
-        #game-over-screen h1 { font-size: 70px; margin-bottom: 0; }
     </style>
 </head>
 <body>
 
     <div id="ui">
-        <div>DEBT AVOIDED: <span id="score">0</span>s</div>
+        <div>TIME UNEMPLOYED: <span id="score">0</span>s</div>
         <div id="stamina-container"><div id="stamina-bar"></div></div>
-        <div style="font-size: 10px; margin-top: 5px;">[WASD] MOVE | [SHIFT] SPRINT</div>
+    </div>
+    <div id="reticle"></div>
+
+    <div id="instructions" class="overlay-screen">
+        <h1>PRECISION HITBOX</h1>
+        <p>The death zone is smaller. You can actually dodge now.</p>
+        <button id="start-btn">BEGIN INTERVIEW</button>
     </div>
 
-    <div id="instructions">
-        <h1>CAREER STALKER</h1>
-        <p>Don't let the job application touch you. STAY UNEMPLOYED.</p>
-        <button id="start-btn">ACCEPT OFFER (START)</button>
-    </div>
-
-    <div id="game-over-screen">
+    <div id="game-over-screen" class="overlay-screen">
         <h1>YOU'RE HIRED.</h1>
-        <p>You survived for <span id="final-score">0</span> seconds before signing.</p>
-        <button onclick="location.reload()">TRY TO RESIGN (RESTART)</button>
+        <p>Survival Time: <span id="final-score">0</span>s</p>
+        <button id="restart-btn">RESIGN (RESTART)</button>
     </div>
 
     <script type="importmap">
@@ -65,152 +54,163 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- SCENE SETUP ---
         const scene = new THREE.Scene();
-        scene.fog = new THREE.Fog(0x000000, 5, 25);
-        
+        scene.fog = new THREE.Fog(0x000000, 5, 50);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // --- LIGHTING ---
-        const ambient = new THREE.AmbientLight(0x404040, 0.5); 
+        const ambient = new THREE.AmbientLight(0xffffff, 1.4); 
         scene.add(ambient);
 
-        const flashLight = new THREE.SpotLight(0xffffff, 100);
-        flashLight.angle = 0.5;
-        flashLight.penumbra = 0.3;
-        scene.add(flashLight);
-        scene.add(flashLight.target);
+        // --- MAZE ---
+        const wallSize = 8;
+        const gridDim = 12;
+        const walls = [];
+        const wallBoxes = [];
+        const wallGeo = new THREE.BoxGeometry(wallSize, 12, wallSize);
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
 
-        // --- WORLD OBJECTS ---
-        const grid = new THREE.GridHelper(500, 100, 0x00ff00, 0x222222);
-        scene.add(grid);
+        for (let x = -gridDim; x <= gridDim; x++) {
+            for (let z = -gridDim; z <= gridDim; z++) {
+                const isBorder = Math.abs(x) === gridDim || Math.abs(z) === gridDim;
+                const isWall = Math.random() > 0.75 && (Math.abs(x) > 1 || Math.abs(z) > 1);
+                if (isBorder || isWall) {
+                    const wall = new THREE.Mesh(wallGeo, wallMat);
+                    wall.position.set(x * wallSize, 6, z * wallSize);
+                    scene.add(wall);
+                    walls.push(wall);
+                    wallBoxes.push(new THREE.Box3().setFromObject(wall));
+                }
+            }
+        }
 
-        // Player (Green Cube)
-        const player = new THREE.Mesh(
-            new THREE.BoxGeometry(0.6, 1.2, 0.6),
-            new THREE.MeshStandardMaterial({ color: 0x00ff00 })
-        );
-        player.position.y = 0.6;
+        const ground = new THREE.GridHelper(500, 50, 0x00ff00, 0x111111);
+        scene.add(ground);
+
+        const player = new THREE.Object3D(); 
+        player.position.set(0, 1.7, 0); 
         scene.add(player);
+        const playerBox = new THREE.Box3();
 
-        // Chaser (The Job Application)
         const loader = new THREE.TextureLoader();
-        const chaserMat = new THREE.MeshStandardMaterial({ 
-            map: loader.load('https://eforms.com/images/2018/03/Employment-Job-Application-791x1024.png'),
-            transparent: true,
-            side: THREE.DoubleSide
-        });
-        const chaser = new THREE.Mesh(new THREE.PlaneGeometry(2, 2.6), chaserMat);
-        chaser.position.set(15, 1.3, 15);
+        const chaser = new THREE.Mesh(
+            new THREE.PlaneGeometry(10, 13), 
+            new THREE.MeshStandardMaterial({ 
+                map: loader.load('https://eforms.com/images/2018/03/Employment-Job-Application-791x1024.png'),
+                transparent: true, side: THREE.DoubleSide
+            })
+        );
+        const fixedY = 6.5;
+        chaser.position.set(60, fixedY, 60);
         scene.add(chaser);
+        const chaserBox = new THREE.Box3();
 
-        // --- GAME LOGIC ---
-        let isLocked = false;
-        let isDead = false;
-        let stamina = 100;
-        let score = 0;
-        let yaw = 0;
-        let chaserSpeed = 0.08;
+        let isLocked = false, isDead = false, stamina = 100, score = 0;
+        let yaw = 0, pitch = 0, stalkerSpeed = 0.22;
         const keys = {};
+        const raycaster = new THREE.Raycaster();
 
-        const startBtn = document.getElementById('start-btn');
-        const instructions = document.getElementById('instructions');
-        const gameOverScreen = document.getElementById('game-over-screen');
+        function resetGame() {
+            isDead = false; score = 0; stamina = 100; stalkerSpeed = 0.22;
+            yaw = 0; pitch = 0;
+            player.position.set(0, 1.7, 0);
+            chaser.position.set(60, fixedY, 60);
+            document.getElementById('game-over-screen').style.display = 'none';
+            document.body.requestPointerLock();
+        }
 
-        // Mouse Lock
-        startBtn.addEventListener('click', () => document.body.requestPointerLock());
+        document.getElementById('start-btn').addEventListener('click', () => document.body.requestPointerLock());
+        document.getElementById('restart-btn').addEventListener('click', resetGame);
         
         document.addEventListener('pointerlockchange', () => {
             isLocked = document.pointerLockElement === document.body;
-            if (!isDead) instructions.style.display = isLocked ? 'none' : 'flex';
+            if (!isDead) document.getElementById('instructions').style.display = isLocked ? 'none' : 'flex';
         });
 
         window.addEventListener('keydown', (e) => keys[e.code] = true);
         window.addEventListener('keyup', (e) => keys[e.code] = false);
-        document.addEventListener('mousemove', (e) => {
-            if (isLocked && !isDead) yaw -= e.movementX * 0.002;
+        document.addEventListener('mousemove', (e) => { 
+            if (isLocked && !isDead) {
+                yaw -= e.movementX * 0.002;
+                pitch -= e.movementY * 0.002;
+                pitch = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, pitch));
+            }
         });
+
+        function checkWallCollision(newPos) {
+            playerBox.setFromCenterAndSize(newPos, new THREE.Vector3(1.2, 2, 1.2));
+            for (let box of wallBoxes) {
+                if (playerBox.intersectsBox(box)) return true;
+            }
+            return false;
+        }
 
         function animate() {
             requestAnimationFrame(animate);
-
-            if (isLocked && !isDead) {
-                // 1. Scoring & Difficulty
+            if (!isDead && isLocked) {
                 score += 1/60;
-                chaserSpeed += 0.00002;
+                stalkerSpeed += 0.00012;
                 document.getElementById('score').innerText = Math.floor(score);
 
-                // 2. Stamina & Speed
-                let currentSpeed = 0.12;
-                if (keys['ShiftLeft'] && stamina > 1) {
-                    currentSpeed = 0.22;
-                    stamina -= 0.5;
-                } else {
-                    if (stamina < 100) stamina += 0.2;
-                }
+                let moveSpeed = (keys['ShiftLeft'] && stamina > 1) ? 0.48 : 0.26;
+                stamina = (keys['ShiftLeft'] && stamina > 1) ? stamina - 0.8 : Math.min(100, stamina + 0.4);
                 document.getElementById('stamina-bar').style.width = stamina + '%';
 
-                // 3. Player Movement
-                player.rotation.y = yaw;
                 const moveVec = new THREE.Vector3();
-                if (keys['KeyW']) moveVec.z -= 1;
+                if (keys['KeyW']) moveVec.z -= 1; 
                 if (keys['KeyS']) moveVec.z += 1;
-                if (keys['KeyA']) moveVec.x -= 1;
+                if (keys['KeyA']) moveVec.x -= 1; 
                 if (keys['KeyD']) moveVec.x += 1;
                 
-                moveVec.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-                player.position.addScaledVector(moveVec, currentSpeed);
-
-                // 4. Camera Follow (3rd Person)
-                const camOffset = new THREE.Vector3(0, 3, 6).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-                camera.position.lerp(player.position.clone().add(camOffset), 0.1);
-                camera.lookAt(player.position);
-
-                // 5. Flashlight follow
-                flashLight.position.copy(player.position).y += 1.5;
-                const targetOffset = new THREE.Vector3(0, 0, -10).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-                flashLight.target.position.copy(player.position).add(targetOffset);
-
-                // 6. Chaser AI
-                const toPlayer = new THREE.Vector3().subVectors(player.position, chaser.position);
-                toPlayer.y = 0;
+                moveVec.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(moveSpeed);
                 
-                // Collision Check
-                if (toPlayer.length() < 1.1) {
-                    endGame();
-                } else {
-                    chaser.position.addScaledVector(toPlayer.normalize(), chaserSpeed);
-                    chaser.lookAt(player.position.x, 1.3, player.position.z);
-                    chaser.position.y = 1.3 + Math.sin(Date.now() * 0.005) * 0.3; // Floating effect
-                }
-            }
+                const nextX = player.position.clone().add(new THREE.Vector3(moveVec.x, 0, 0));
+                if (!checkWallCollision(nextX)) player.position.x = nextX.x;
+                const nextZ = player.position.clone().add(new THREE.Vector3(0, 0, moveVec.z));
+                if (!checkWallCollision(nextZ)) player.position.z = nextZ.z;
 
+                camera.position.copy(player.position);
+                camera.rotation.order = "YXZ";
+                camera.rotation.set(pitch, yaw, 0);
+
+                // --- PRECISION HITBOX ---
+                // Shrunk player collision box to 0.8 and chaser's active lethal depth to 1
+                playerBox.setFromCenterAndSize(player.position, new THREE.Vector3(0.8, 2, 0.8));
+                chaserBox.setFromCenterAndSize(chaser.position, new THREE.Vector3(9, 12, 1)); 
+
+                if (playerBox.intersectsBox(chaserBox)) { 
+                    isDead = true;
+                    document.exitPointerLock();
+                    document.getElementById('game-over-screen').style.display = 'flex';
+                    document.getElementById('final-score').innerText = Math.floor(score);
+                } else {
+                    const dir = new THREE.Vector3().subVectors(player.position, chaser.position).normalize();
+                    
+                    raycaster.set(chaser.position, dir);
+                    const intersects = raycaster.intersectObjects(walls);
+                    
+                    let finalSpeed = stalkerSpeed;
+                    if (intersects.length > 0 && intersects[0].distance < 4) {
+                        finalSpeed *= 0.4; // Slow phasing
+                    }
+
+                    chaser.position.addScaledVector(dir, finalSpeed);
+                    chaser.lookAt(player.position.x, fixedY, player.position.z);
+                    chaser.position.y = fixedY; 
+                }
+            } else if (isDead) {
+                camera.lookAt(chaser.position.x, chaser.position.y, chaser.position.z);
+            }
             renderer.render(scene, camera);
         }
 
-        function endGame() {
-            isDead = true;
-            document.exitPointerLock();
-            gameOverScreen.style.display = 'flex';
-            document.getElementById('final-score').innerText = Math.floor(score);
-            
-            // Dramatic Death Zoom
-            camera.position.set(chaser.position.x, chaser.position.y + 1, chaser.position.z + 3);
-            camera.lookAt(chaser.position);
-        }
-
+        animate();
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-
-        animate();
     </script>
 </body>
 </html>
-
