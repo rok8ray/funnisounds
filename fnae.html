@@ -124,7 +124,8 @@
             document.body.appendChild(renderer.domElement);
 
             if (window.loadedModel) {
-                window.loadedModel.position.set(0,0,0);
+                window.loadedModel.position.set(-1,3,3);
+                window.loadedModel.scale.set(10,10,10);
                 scene.add(window.loadedModel);
             }
             
