@@ -119,7 +119,7 @@
             document.body.appendChild(renderer.domElement);
             
             // --- dev mode ---
-            const devMode = 0
+            let devMode = 0
             document.addEventListener('keydown', function(event) {
                 if (devMode === 0) {
                     devMode = 1
