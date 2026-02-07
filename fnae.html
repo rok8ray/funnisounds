@@ -15,8 +15,11 @@
         #start-btn {
             padding: 20px 40px; font-size: 2em; background: transparent; 
             color: #0f0; border: 2px solid #0f0; cursor: pointer; font-family: inherit;
+            display: none; /* Hidden until model loads */
         }
         #start-btn:hover { background: #0f0; color: #000; }
+
+        #loading-text { color: #555; font-size: 1.5em; margin-top: 20px; }
 
         /* Fixed UI Overlay */
         #ui { 
@@ -63,6 +66,7 @@
 
     <div id="menu">
         <h1>FIVE NIGHTS AT THE TEMPLE</h1>
+        <div id="loading-text">Loading model...</div>
         <button id="start-btn">START GAME</button>
     </div>
 
@@ -87,6 +91,20 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+        // Variables needed globally within the module
+        let loadedModel = null;
+
+        const loader = new GLTFLoader();
+        loader.load(
+          'https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/3dmodels/temple.glb',
+          (gltf) => {
+            loadedModel = gltf.scene;
+            // Hide loading text and show start button
+            document.getElementById('loading-text').style.display = 'none';
+            document.getElementById('start-btn').style.display = 'block';
+          }
+        );
+
         function startGame() {
             // Hide menu and show UI
             document.getElementById('menu').style.display = 'none';
@@ -101,15 +119,10 @@
             document.body.appendChild(renderer.domElement);
 
             // --- THE GOONING ---
-            const loader = new GLTFLoader();
-            loader.load(
-              'https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/3dmodels/temple.glb',
-              (gltf) => {
-                const model = gltf.scene;
-                model.position.set(0,0,0);
-                scene.add(model);
-              }
-            );
+            if (loadedModel) {
+                loadedModel.position.set(0,0,0);
+                scene.add(loadedModel);
+            }
             
             // --- THE DOOR ---
             const leftDoor = new THREE.Mesh(new THREE.BoxGeometry(1, 15, 8), new THREE.MeshStandardMaterial({ color: 0x222222 }));
