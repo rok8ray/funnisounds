@@ -71,6 +71,7 @@
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0,0,0);
         
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -169,7 +170,7 @@
 
             power -= (0.005 + (!leftOpen ? 0.08 : 0) + (hallwayL.intensity ? 0.04 : 0));
             document.getElementById('power-display').innerText = `POWER: ${Math.max(0, Math.floor(power))}%`;
-            //if (power <= 0) endGame("POWER OUTAGE", "black");
+            if (power <= 0) endGame("POWER OUTAGE", "black");
 
             if (Math.random() > 0.998 && !enemyActive) {
                 enemyActive = true;
@@ -179,7 +180,7 @@
             enemy.position.z = THREE.MathUtils.lerp(enemy.position.z, targetZ, 0.02);
 
             if (enemyActive && enemy.position.z > -2 && leftOpen && Math.random() > 0.99) {
-                //endGame("GAME OVER", "red");
+                endGame("GAME OVER", "red");
             }
 
             if (!leftOpen && enemyActive && enemy.position.z > -3) {
