@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FNAF - Fixed UI</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
+        
+        /* Fixed UI Overlay */
+        #ui { 
+            position: absolute; 
+            width: 100%; 
+            height: 100%; 
+            pointer-events: none; 
+            z-index: 10; 
+            padding: 20px;
+            box-sizing: border-box; /* Ensures padding doesn't push elements off screen */
+        }
+        
+        .stats { color: #0f0; font-size: 1.5em; text-shadow: 0 0 5px #0f0; }
+        
+        /* Adjusted Clock Positioning */
+        #clock { 
+            position: absolute; 
+            top: 20px; 
+            right: 40px; /* More breathing room from the edge */
+            text-align: right;
+            min-width: 150px;
+        }
+
+        #power-display {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+        }
+
+        #static-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 100;
+            background: url('https://upload.wikimedia.org/wikipedia/commons/0/02/Television_static.gif');
+            opacity: 0.05;
+        }
+        #screen-msg {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; z-index: 1000; align-items: center; justify-content: center;
+            font-size: 5em; font-weight: bold; flex-direction: column; text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="static-overlay"></div>
+    <div id="screen-msg"></div>
+    
+    <div id="ui">
+        <div class="stats" id="power-display">POWER: 100%</div>
+        <div class="stats" id="clock">12 AM</div>
+    </div>
+
+    <script type="importmap">
+      { 
+         "imports": { 
+              "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+              "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+          } 
+      }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 15; // Higher number = further away/more zoomed out
+        camera.position.y = 2;  // Slightly raises the camera to see the floor
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        // --- THE GOONING ---
+        const loader = new GLTFLoader();
+        loader.load(
+          'https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/3dmodels/temple.glb',
+          (gltf) => {
+            const model = gltf.scene;
+            model.scale.set(0.1,0.1,0.1);
+            model.position.set(0,0,-1);
+            scene.add(model);
+          }
+        );
+        
+        // --- THE OFFICE ---
+        //const office = new THREE.Mesh(
+            //new THREE.BoxGeometry(30, 15, 20), 
+            //new THREE.MeshStandardMaterial({ color: 0x111111, side: THREE.BackSide })
+        //);
+        //scene.add(office);
+
+        //const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+        //const wall1 = new THREE.Mesh(new THREE.BoxGeometry(1, 15, 6), wallMaterial);
+        //wall1.position.set(-8.5, 0, 4); 
+        //scene.add(wall1);
+
+        //const wall2 = new THREE.Mesh(new THREE.BoxGeometry(1, 15, 6), wallMaterial);
+        //wall2.position.set(-8.5, 0, -6);
+        //scene.add(wall2);
+
+        // --- THE DOOR ---
+        const leftDoor = new THREE.Mesh(new THREE.BoxGeometry(1, 15, 8), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+        leftDoor.position.set(-8.4, 15, -1); 
+        scene.add(leftDoor);
+
+        // --- THE THREAT ---
+        const enemy = new THREE.Mesh(
+            new THREE.SphereGeometry(1.5), 
+            new THREE.MeshStandardMaterial({color: 0xff0000, roughness: 0.8}) 
+        );
+        enemy.position.set(-12, -2, -15); 
+        scene.add(enemy);
+
+        // --- THE BUTTONS ---
+        const createBtn = (y, type, color) => {
+            const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 1), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 }));
+            b.position.set(-8, y, 4); b.userData = { type };
+            scene.add(b);
+        };
+        createBtn(1, "doorL", 0xff0000);   
+        createBtn(-1, "lightL", 0xffffff); 
+
+        // --- LIGHTS ---
+        scene.add(new THREE.AmbientLight(0xffffff, 100));
+        const hallwayL = new THREE.PointLight(0xffffff, 0, 50);
+        hallwayL.position.set(-10, 2, -1); 
+        scene.add(hallwayL);
+
+        // --- GAME LOGIC ---
+        let mouseX = 0, power = 100, leftOpen = true, isGameOver = false, hour = 0, time = 0;
+        let enemyActive = false;
+        let targetZ = -15;
+
+        window.addEventListener('mousemove', (e) => mouseX = (e.clientX / window.innerWidth) * 2 - 1);
+        window.addEventListener('mousedown', (e) => {
+            const mouse = new THREE.Vector2((e.clientX/innerWidth)*2-1, -(e.clientY/innerHeight)*2+1);
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(scene.children);
+            hits.forEach(h => {
+                if(h.object.userData.type === "doorL") leftOpen = !leftOpen;
+                if(h.object.userData.type === "lightL") hallwayL.intensity = hallwayL.intensity ? 0 : 800;
+            });
+        });
+
+        function endGame(msg, color) {
+            isGameOver = true;
+            const el = document.getElementById('screen-msg');
+            el.innerHTML = msg; el.style.backgroundColor = color;
+            el.style.color = "white"; el.style.display = 'flex';
+        }
+
+        function animate() {
+            if (isGameOver) return;
+            requestAnimationFrame(animate);
+
+            camera.rotation.y += (-mouseX * 1.5 - camera.rotation.y) * 0.05;
+            leftDoor.position.y = THREE.MathUtils.lerp(leftDoor.position.y, leftOpen ? 15 : 0, 0.1);
+
+            time += 1/60; 
+            if(time >= 40) { time = 0; hour++; 
+                document.getElementById('clock').innerText = (hour === 0 ? 12 : hour) + " AM";
+                if(hour === 6) endGame("6 AM<br>YOU WIN", "blue");
+            }
+
+            power -= (0.005 + (!leftOpen ? 0.08 : 0) + (hallwayL.intensity ? 0.04 : 0));
+            document.getElementById('power-display').innerText = `POWER: ${Math.max(0, Math.floor(power))}%`;
+            //if (power <= 0) endGame("POWER OUTAGE", "black");
+
+            if (Math.random() > 0.998 && !enemyActive) {
+                enemyActive = true;
+                targetZ = -1;
+            }
+
+            enemy.position.z = THREE.MathUtils.lerp(enemy.position.z, targetZ, 0.02);
+
+            if (enemyActive && enemy.position.z > -2 && leftOpen && Math.random() > 0.99) {
+                //endGame("GAME OVER", "red");
+            }
+
+            if (!leftOpen && enemyActive && enemy.position.z > -3) {
+                targetZ = -15;
+                if (enemy.position.z < -14) {
+                    enemyActive = false;
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
