@@ -49,6 +49,15 @@
             left: 40px;
         }
 
+        /* Debug UI */
+        #debug-indicator {
+            position: absolute;
+            top: 60px;
+            left: 40px;
+            color: #ff0;
+            display: none;
+        }
+
         #static-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none; z-index: 100;
@@ -76,6 +85,7 @@
     <div id="ui">
         <div class="stats" id="power-display">POWER: 100%</div>
         <div class="stats" id="clock">12 AM</div>
+        <div class="stats" id="debug-indicator">DEBUG MODE: ON</div>
     </div>
 
     <script type="importmap">
@@ -95,9 +105,7 @@
         loader.load(
           'https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/3dmodels/temple.glb',
           (gltf) => {
-            // ATTACH TO WINDOW SO CONSOLE CAN SEE IT
             window.loadedModel = gltf.scene; 
-            
             document.getElementById('loading-text').style.display = 'none';
             document.getElementById('start-btn').style.display = 'block';
           }
@@ -144,11 +152,22 @@
             hallwayL.position.set(-10, 2, -1); 
             scene.add(hallwayL);
 
+            // --- GAME LOGIC ---
             let mouseX = 0, power = 100, leftOpen = true, isGameOver = false, hour = 0, time = 0;
             let enemyActive = false;
             let targetZ = -15;
+            let debugMode = false; // New Debug Mode Variable
 
             window.addEventListener('mousemove', (e) => mouseX = (e.clientX / window.innerWidth) * 2 - 1);
+            
+            // KEYBIND LISTENER
+            window.addEventListener('keydown', (e) => {
+                if (e.key.toLowerCase() === 'd') {
+                    debugMode = !debugMode;
+                    document.getElementById('debug-indicator').style.display = debugMode ? 'block' : 'none';
+                }
+            });
+
             window.addEventListener('mousedown', (e) => {
                 const mouse = new THREE.Vector2((e.clientX/innerWidth)*2-1, -(e.clientY/innerHeight)*2+1);
                 const raycaster = new THREE.Raycaster();
@@ -180,9 +199,14 @@
                     if(hour === 6) endGame("6 AM<br>YOU WIN", "blue");
                 }
 
-                power -= (0.005 + (!leftOpen ? 0.08 : 0) + (hallwayL.intensity ? 0.04 : 0));
+                // If debug mode is on, power won't drain
+                if (!debugMode) {
+                    power -= (0.005 + (!leftOpen ? 0.08 : 0) + (hallwayL.intensity ? 0.04 : 0));
+                }
+                
                 document.getElementById('power-display').innerText = `POWER: ${Math.max(0, Math.floor(power))}%`;
-                if (power <= 0) endGame("POWER OUTAGE", "black");
+                
+                if (power <= 0 && !debugMode) endGame("POWER OUTAGE", "black");
 
                 if (Math.random() > 0.998 && !enemyActive) {
                     enemyActive = true;
@@ -191,8 +215,11 @@
 
                 enemy.position.z = THREE.MathUtils.lerp(enemy.position.z, targetZ, 0.02);
 
+                // Modified Game Over check to respect Debug Mode
                 if (enemyActive && enemy.position.z > -2 && leftOpen && Math.random() > 0.99) {
-                    endGame("GAME OVER", "red");
+                    if (!debugMode) {
+                        endGame("GAME OVER", "red");
+                    }
                 }
 
                 if (!leftOpen && enemyActive && enemy.position.z > -3) {
