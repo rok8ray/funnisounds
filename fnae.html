@@ -129,39 +129,42 @@
                 scene.add(window.loadedModel);
             }
             
+            // Adjusted Door Position (-0.5 on X and Z)
             const leftDoor = new THREE.Mesh(new THREE.BoxGeometry(1, 15, 8), new THREE.MeshStandardMaterial({ color: 0x222222 }));
-            leftDoor.position.set(-8.4, 15, -1); 
+            leftDoor.position.set(-8.9, 15, -1.5); 
             scene.add(leftDoor);
 
+            // Adjusted Enemy Position (-0.5 on X and Z)
             const enemy = new THREE.Mesh(
                 new THREE.SphereGeometry(1.5), 
                 new THREE.MeshStandardMaterial({color: 0xff0000, roughness: 0.8}) 
             );
-            enemy.position.set(-12, -2, -15); 
+            enemy.position.set(-12.5, -2, -15.5); 
             scene.add(enemy);
 
+            // Adjusted Button Positions (-0.5 on X and Z)
             const createBtn = (y, type, color) => {
                 const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 1), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 }));
-                b.position.set(-8, y, 4); b.userData = { type };
+                b.position.set(-8.5, y, 3.5); b.userData = { type };
                 scene.add(b);
             };
             createBtn(1, "doorL", 0xff0000);   
             createBtn(-1, "lightL", 0xffffff); 
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            // Adjusted Panel/Light Position (-0.5 on X and Z)
             const hallwayL = new THREE.PointLight(0xffffff, 0, 50);
-            hallwayL.position.set(-10, 2, -1); 
+            hallwayL.position.set(-10.5, 2, -1.5); 
             scene.add(hallwayL);
 
             // --- GAME LOGIC ---
             let mouseX = 0, power = 100, leftOpen = true, isGameOver = false, hour = 0, time = 0;
             let enemyActive = false;
-            let targetZ = -15;
-            let debugMode = false; // New Debug Mode Variable
+            let targetZ = -15.5; // Offset target for logic consistency
+            let debugMode = false;
 
             window.addEventListener('mousemove', (e) => mouseX = (e.clientX / window.innerWidth) * 2 - 1);
             
-            // KEYBIND LISTENER
             window.addEventListener('keydown', (e) => {
                 if (e.key.toLowerCase() === 'd') {
                     debugMode = !debugMode;
@@ -200,7 +203,6 @@
                     if(hour === 6) endGame("6 AM<br>YOU WIN", "blue");
                 }
 
-                // If debug mode is on, power won't drain
                 if (!debugMode) {
                     power -= (0.005 + (!leftOpen ? 0.08 : 0) + (hallwayL.intensity ? 0.04 : 0));
                 }
@@ -211,21 +213,20 @@
 
                 if (Math.random() > 0.998 && !enemyActive) {
                     enemyActive = true;
-                    targetZ = -1;
+                    targetZ = -1.5; // Adjusted attack threshold
                 }
 
                 enemy.position.z = THREE.MathUtils.lerp(enemy.position.z, targetZ, 0.02);
 
-                // Modified Game Over check to respect Debug Mode
-                if (enemyActive && enemy.position.z > -2 && leftOpen && Math.random() > 0.99) {
+                if (enemyActive && enemy.position.z > -2.5 && leftOpen && Math.random() > 0.99) {
                     if (!debugMode) {
                         endGame("GAME OVER", "red");
                     }
                 }
 
-                if (!leftOpen && enemyActive && enemy.position.z > -3) {
-                    targetZ = -15;
-                    if (enemy.position.z < -14) {
+                if (!leftOpen && enemyActive && enemy.position.z > -3.5) {
+                    targetZ = -15.5;
+                    if (enemy.position.z < -14.5) {
                         enemyActive = false;
                     }
                 }
