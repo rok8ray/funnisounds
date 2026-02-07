@@ -117,7 +117,17 @@
             const renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
-
+            
+            // --- dev mode ---
+            const devMode = 0
+            document.addEventListener('keydown', function(event) {
+                if (devMode === 0) {
+                    devMode = 1
+                } else {
+                    devmode = 0
+                }
+            };
+            
             // --- THE GOONING ---
             if (loadedModel) {
                 loadedModel.position.set(0,2,5);
@@ -192,7 +202,7 @@
 
                 power -= (0.005 + (!leftOpen ? 0.08 : 0) + (hallwayL.intensity ? 0.04 : 0));
                 document.getElementById('power-display').innerText = `POWER: ${Math.max(0, Math.floor(power))}%`;
-                if (power <= 0) endGame("POWER OUTAGE", "black");
+                if (power <= 0 || devMode === 1) endGame("POWER OUTAGE", "black");
 
                 if (Math.random() > 0.998 && !enemyActive) {
                     enemyActive = true;
@@ -202,7 +212,7 @@
                 enemy.position.z = THREE.MathUtils.lerp(enemy.position.z, targetZ, 0.02);
 
                 if (enemyActive && enemy.position.z > -2 && leftOpen && Math.random() > 0.99) {
-                    endGame("GAME OVER", "red");
+                    if (devMode === 1) { endGame("GAME OVER", "red"); };
                 }
 
                 if (!leftOpen && enemyActive && enemy.position.z > -3) {
