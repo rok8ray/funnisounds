@@ -91,22 +91,19 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // Variables needed globally within the module
-        let loadedModel = null;
-
         const loader = new GLTFLoader();
         loader.load(
           'https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/3dmodels/temple.glb',
           (gltf) => {
-            loadedModel = gltf.scene;
-            // Hide loading text and show start button
+            // ATTACH TO WINDOW SO CONSOLE CAN SEE IT
+            window.loadedModel = gltf.scene; 
+            
             document.getElementById('loading-text').style.display = 'none';
             document.getElementById('start-btn').style.display = 'block';
           }
         );
 
         function startGame() {
-            // Hide menu and show UI
             document.getElementById('menu').style.display = 'none';
             document.getElementById('ui').style.display = 'block';
 
@@ -117,30 +114,16 @@
             const renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
-            
-            // --- dev mode ---
-            let devMode = 0
-            document.addEventListener('keydown', function(event) {
-                if (devMode === 0) {
-                    devMode = 1
-                } else {
-                    devMode = 0
-                }
-            });
-            
-            // --- THE GOONING ---
-            if (loadedModel) {
-                loadedModel.position.set(0,2,5);
-                loadedModel.scale.set(15,15,15);
-                scene.add(loadedModel);
+
+            if (window.loadedModel) {
+                window.loadedModel.position.set(0,0,0);
+                scene.add(window.loadedModel);
             }
             
-            // --- THE DOOR ---
             const leftDoor = new THREE.Mesh(new THREE.BoxGeometry(1, 15, 8), new THREE.MeshStandardMaterial({ color: 0x222222 }));
             leftDoor.position.set(-8.4, 15, -1); 
             scene.add(leftDoor);
 
-            // --- THE THREAT ---
             const enemy = new THREE.Mesh(
                 new THREE.SphereGeometry(1.5), 
                 new THREE.MeshStandardMaterial({color: 0xff0000, roughness: 0.8}) 
@@ -148,7 +131,6 @@
             enemy.position.set(-12, -2, -15); 
             scene.add(enemy);
 
-            // --- THE BUTTONS ---
             const createBtn = (y, type, color) => {
                 const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 1), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 }));
                 b.position.set(-8, y, 4); b.userData = { type };
@@ -157,13 +139,11 @@
             createBtn(1, "doorL", 0xff0000);   
             createBtn(-1, "lightL", 0xffffff); 
 
-            // --- LIGHTS ---
             scene.add(new THREE.AmbientLight(0xffffff, 0.5));
             const hallwayL = new THREE.PointLight(0xffffff, 0, 50);
             hallwayL.position.set(-10, 2, -1); 
             scene.add(hallwayL);
 
-            // --- GAME LOGIC ---
             let mouseX = 0, power = 100, leftOpen = true, isGameOver = false, hour = 0, time = 0;
             let enemyActive = false;
             let targetZ = -15;
@@ -202,7 +182,7 @@
 
                 power -= (0.005 + (!leftOpen ? 0.08 : 0) + (hallwayL.intensity ? 0.04 : 0));
                 document.getElementById('power-display').innerText = `POWER: ${Math.max(0, Math.floor(power))}%`;
-                if (power <= 0 && devMode === 0) endGame("POWER OUTAGE", "black");
+                if (power <= 0) endGame("POWER OUTAGE", "black");
 
                 if (Math.random() > 0.998 && !enemyActive) {
                     enemyActive = true;
@@ -212,7 +192,7 @@
                 enemy.position.z = THREE.MathUtils.lerp(enemy.position.z, targetZ, 0.02);
 
                 if (enemyActive && enemy.position.z > -2 && leftOpen && Math.random() > 0.99) {
-                    if (devMode === 0) { endGame("GAME OVER", "red"); };
+                    endGame("GAME OVER", "red");
                 }
 
                 if (!leftOpen && enemyActive && enemy.position.z > -3) {
@@ -227,7 +207,6 @@
             animate();
         }
 
-        // Attach event listener to the menu button
         document.getElementById('start-btn').addEventListener('click', startGame);
 
     </script>
