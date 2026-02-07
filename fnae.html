@@ -126,7 +126,7 @@
         createBtn(-1, "lightL", 0xffffff); 
 
         // --- LIGHTS ---
-        scene.add(new THREE.AmbientLight(0xffffff, 100));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.01));
         const hallwayL = new THREE.PointLight(0xffffff, 0, 50);
         hallwayL.position.set(-10, 2, -1); 
         scene.add(hallwayL);
