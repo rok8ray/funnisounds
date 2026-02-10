@@ -134,14 +134,14 @@
             }
             
             const leftDoor = new THREE.Mesh(new THREE.BoxGeometry(1, 15, 8), new THREE.MeshStandardMaterial({ color: 0x222222 }));
-            leftDoor.position.set(-8.9, 15, -1.5); 
+            leftDoor.position.set(-8.9, 15, -1); 
             scene.add(leftDoor);
 
             const enemy = new THREE.Mesh(
                 new THREE.SphereGeometry(1.5), 
                 new THREE.MeshStandardMaterial({color: 0xff0000, roughness: 0.8}) 
             );
-            enemy.position.set(-12.5, -2, -14.5); 
+            enemy.position.set(-12.5, -2, -14); 
             scene.add(enemy);
 
             const createBtn = (y, type, color) => {
@@ -154,7 +154,7 @@
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.5));
             const hallwayL = new THREE.PointLight(0xffffff, 0, 50);
-            hallwayL.position.set(-10.5, 2, 0.5); 
+            hallwayL.position.set(-10.5, 2, 0); 
             scene.add(hallwayL);
 
             let mouseX = 0, power = 100, leftOpen = true, isGameOver = false, hour = 0, time = 0;
@@ -219,7 +219,7 @@
 
                 if (Math.random() > 0.998 && !enemyActive) {
                     enemyActive = true;
-                    targetZ = -1.5; 
+                    targetZ = -1; 
                 }
 
                 enemy.position.z = THREE.MathUtils.lerp(enemy.position.z, targetZ, 0.02);
@@ -229,7 +229,7 @@
                 }
 
                 if (!leftOpen && enemyActive && enemy.position.z > -3.5) {
-                    targetZ = -14.5;
+                    targetZ = -14;
                     if (enemy.position.z < -14.5) enemyActive = false;
                 }
 
