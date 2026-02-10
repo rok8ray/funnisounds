@@ -146,7 +146,7 @@
 
             const createBtn = (y, type, color) => {
                 const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 1), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 }));
-                b.position.set(-8.5, y, 4.5); b.userData = { type };
+                b.position.set(-7.5, y, 4); b.userData = { type };
                 scene.add(b);
             };
             createBtn(1, "doorL", 0xff0000);   
