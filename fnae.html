@@ -102,7 +102,7 @@
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
         // Global UI variable for console adjustment
-        window.ui = { x: -1, y: 3, z: -5 };
+        window.ui = { x: -1, y: 3, z: 3 };
 
         const loader = new GLTFLoader();
         loader.load(
@@ -141,12 +141,12 @@
                 new THREE.SphereGeometry(1.5), 
                 new THREE.MeshStandardMaterial({color: 0xff0000, roughness: 0.8}) 
             );
-            enemy.position.set(-12.5, -2, -15.5); 
+            enemy.position.set(-12.5, -2, -14.5); 
             scene.add(enemy);
 
             const createBtn = (y, type, color) => {
                 const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 1), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 }));
-                b.position.set(-8.5, y, 3.5); b.userData = { type };
+                b.position.set(-8.5, y, 4.5); b.userData = { type };
                 scene.add(b);
             };
             createBtn(1, "doorL", 0xff0000);   
@@ -154,7 +154,7 @@
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.5));
             const hallwayL = new THREE.PointLight(0xffffff, 0, 50);
-            hallwayL.position.set(-10.5, 2, -1.5); 
+            hallwayL.position.set(-10.5, 2, 0.5); 
             scene.add(hallwayL);
 
             let mouseX = 0, power = 100, leftOpen = true, isGameOver = false, hour = 0, time = 0;
@@ -229,7 +229,7 @@
                 }
 
                 if (!leftOpen && enemyActive && enemy.position.z > -3.5) {
-                    targetZ = -15.5;
+                    targetZ = -14.5;
                     if (enemy.position.z < -14.5) enemyActive = false;
                 }
 
