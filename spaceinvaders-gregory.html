@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Space Alien Invaders - Fleet Commander</title>
+    <style>
+        body { text-align: center; background: #050510; color: #00ffcc; font-family: 'Segoe UI', sans-serif; margin: 0; overflow: hidden; }
+        canvas { background: #000; border: 4px solid #333; display: block; margin: 10px auto; box-shadow: 0 0 20px rgba(0, 255, 204, 0.2); image-rendering: pixelated; cursor: default; }
+        .ui-container { margin-top: 15px; font-weight: bold; letter-spacing: 2px; position: relative; width: 600px; margin-left: auto; margin-right: auto; }
+        #pauseBtn { position: absolute; right: 0; top: -5px; padding: 5px 15px; background: none; border: 2px solid #00ffcc; color: #00ffcc; cursor: pointer; font-family: 'Courier New'; font-weight: bold; display: none; }
+        #pauseBtn:hover { background: #00ffcc; color: #000; }
+    </style>
+</head>
+<body>
+
+    <div class="ui-container">
+        SCORE: <span id="score" style="color:white">0</span> |
+        <span id="labelType">USER</span> BEST: <span id="highScore" style="color:#ffd700">0</span>
+        <span id="livesContainer" style="color:#ff3366; margin-left: 15px;"></span>
+        <button id="pauseBtn" onclick="togglePause()">PAUSE</button>
+    </div>
+
+    <canvas id="gameCanvas" width="600" height="500"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreDisplay = document.getElementById("score");
+        const highScoreDisplay = document.getElementById("highScore");
+        const labelType = document.getElementById("labelType");
+        const livesContainer = document.getElementById("livesContainer");
+        const pauseBtn = document.getElementById("pauseBtn");
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSfx(freq, type, duration, vol) {
+            if (isPaused) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        }
+
+        const shipStyles = [
+            { id: 0, req: 0, main: "#FFFFFF", sec: "#D63031", cockpit: "#54A0FF", flame: "#FF6600", name: "CLASSIC", speed: 7, fireDelay: 360, sprite: [[0,0,0,0,0,1,0,0,0,0,0],[0,0,0,0,0,1,0,0,0,0,0],[0,0,0,0,1,1,1,0,0,0,0],[0,2,0,0,1,1,1,0,0,2,0],[0,2,0,0,1,1,1,0,0,2,0],[0,1,1,3,1,2,1,3,1,1,0],[2,1,1,3,1,2,1,3,1,1,2],[2,1,1,1,2,0,2,1,1,1,2]]},
+            { id: 1, req: 500, main: "#54A0FF", sec: "#FFFFFF", cockpit: "#00FF44", flame: "#00FFFF", name: "STEALTH", speed: 7, fireDelay: 360, sprite: [[0,0,0,0,0,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,0,0],[0,1,1,1,1,3,1,1,1,1,0],[2,1,1,2,2,2,2,2,1,1,2],[2,2,1,1,1,1,1,1,1,2,2],[0,0,2,2,0,0,0,2,2,0,0]]},
+            { id: 2, req: 1000, main: "#FFD700", sec: "#000000", cockpit: "#FF3366", flame: "#FF0000", name: "ELITE GOLD", speed: 10, fireDelay: 360, sprite: [[0,0,0,0,0,1,0,0,0,0,0],[0,0,0,1,1,1,1,1,0,0,0],[0,1,1,1,1,3,1,1,1,1,0],[1,1,2,2,2,1,2,2,2,1,1],[1,1,2,1,1,1,1,1,2,1,1],[2,2,2,0,0,0,0,0,2,2,2]]},
+            { id: 3, req: 1500, main: "#8E44AD", sec: "#00D2FF", cockpit: "#FFFFFF", flame: "#A020F0", name: "ATOMIC STAR", speed: 7, fireDelay: 360, sprite: [[0,0,0,0,0,1,0,0,0,0,0],[2,0,0,0,1,1,1,0,0,0,2],[2,2,0,1,1,3,1,1,0,2,2],[2,1,1,1,3,3,3,1,1,1,2],[0,1,1,1,3,1,3,1,1,1,0],[0,0,2,1,1,1,1,1,2,0,0],[0,0,2,0,1,0,1,0,2,0,0]]},
+            { id: 4, req: 2000, main: "#2C3E50", sec: "#E74C3C", cockpit: "#BDC3C7", flame: "#FF0000", name: "VOID WALKER", speed: 7, fireDelay: 360, sprite: [[0,1,1,1,1,1,1,1,1,1,0],[1,1,1,1,1,3,1,1,1,1,1],[1,1,2,2,2,2,2,2,2,1,1],[1,2,2,1,1,1,1,1,2,2,1],[1,2,1,1,1,1,1,1,1,2,1],[2,2,0,1,1,0,1,1,0,2,2]]},
+            { id: 5, req: 3000, main: "#FF0080", sec: "#FFFF00", cockpit: "#00FFFF", flame: "#FFCC00", name: "CHROMATIC DRAGON", speed: 8, fireDelay: 360, sprite: [[0,0,0,0,0,1,0,0,0,0,0],[0,0,0,0,1,3,1,0,0,0,0],[0,0,1,1,1,2,1,1,1,0,0],[0,1,1,2,2,2,2,2,1,1,0],[1,1,2,2,3,3,3,2,2,1,1],[1,2,2,1,1,1,1,1,2,2,1],[2,0,0,1,1,0,1,1,0,0,2]]}
+        ];
+
+        let profiles = JSON.parse(localStorage.getItem("invaderProfiles")) || {};
+        let globalBoard = JSON.parse(localStorage.getItem("invaderGlobalBest")) || [];
+        let cheatBoard = JSON.parse(localStorage.getItem("invaderCheatBest")) || [];
+        let currentUsername = localStorage.getItem("lastInvaderUser") || "GUEST";
+        let cheatsEnabled = false, realHighScore = 0, frameCount = 0, shake = 0, shipType = 0;
+        let lastShotTime = 0, trails = [], ghosts = [], isPaused = false;
+
+        function loadUserProfile(name) {
+            name = name.trim().toUpperCase().substring(0, 8) || "GUEST";
+            if (!profiles[name]) profiles[name] = { highScore: 0 };
+            currentUsername = name;
+            realHighScore = profiles[name].highScore;
+            highScoreDisplay.innerText = realHighScore;
+            localStorage.setItem("lastInvaderUser", name);
+            localStorage.setItem("invaderProfiles", JSON.stringify(profiles));
+        }
+
+        function updateLeaderboards(finalScore) {
+            let targetBoard = cheatsEnabled ? cheatBoard : globalBoard;
+            let storageKey = cheatsEnabled ? "invaderCheatBest" : "invaderGlobalBest";
+            targetBoard.push({ name: currentUsername, score: finalScore, shipId: shipType });
+            targetBoard.sort((a, b) => b.score - a.score);
+            targetBoard.splice(5);
+            localStorage.setItem(storageKey, JSON.stringify(targetBoard));
+        }
+
+        function togglePause() {
+            if (gameState === "PLAYING") {
+                isPaused = !isPaused;
+                pauseBtn.innerText = isPaused ? "RESUME" : "PAUSE";
+            }
+        }
+
+        loadUserProfile(currentUsername);
+
+        let gameState = "MENU", score = 0, lives = 1, baseAlienSpeed = 1.5;
+        let bullets = [], aliens = [], alienBullets = [], explosions = [], stars = [], keys = {};
+        let player = { x: 275, y: 420, w: 44, h: 44 };
+
+        for(let i=0; i<80; i++) stars.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*2 });
+
+        canvas.addEventListener("mousedown", e => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+           
+            if (isPaused) {
+                if (mx >= 220 && mx <= 380 && my >= 280 && my <= 320) {
+                    gameState = "MENU";
+                    isPaused = false;
+                    pauseBtn.style.display = "none";
+                    return;
+                }
+            }
+
+            if (gameState === "MENU") {
+                if (mx >= 270 && mx <= 330 && my >= 240 && my <= 300) { shipType = (shipType + 1) % shipStyles.length; playSfx(600, "square", 0.1, 0.1); }
+                else if (mx >= 130 && mx <= 280 && my >= 340 && my <= 380) { let name = prompt("Enter Pilot Name:", currentUsername); if (name) loadUserProfile(name); }
+                else if (mx >= 320 && mx <= 470 && my >= 340 && my <= 380) { if (prompt("ENTER CODE:") === "BIBI") { cheatsEnabled = true; labelType.innerText = "DEV"; labelType.style.color = "#00FF44"; playSfx(1200, "square", 0.2, 0.1); } }
+                else if (mx >= 220 && mx <= 380 && my >= 400 && my <= 455) { if (shipStyles[shipType].req <= realHighScore || cheatsEnabled) resetGame(); }
+            } else if (gameState === "GAMEOVER") {
+                if (my >= 380 && my <= 420) resetGame(); else if (my >= 430 && my <= 470) gameState = "MENU";
+            }
+        });
+
+        window.addEventListener("keydown", e => {
+            keys[e.code] = true;
+            if (e.code === "KeyP") togglePause();
+        });
+        window.addEventListener("keyup", e => keys[e.code] = false);
+
+        function resetGame() {
+            score = 0; scoreDisplay.innerText = 0; baseAlienSpeed = 1.5; aliens = []; bullets = []; alienBullets = []; explosions = []; trails = []; ghosts = [];
+            gameState = "PLAYING"; lives = cheatsEnabled ? 3 : 1; updateLivesUI();
+            isPaused = false; pauseBtn.innerText = "PAUSE"; pauseBtn.style.display = "block";
+        }
+        function updateLivesUI() { livesContainer.innerHTML = "LIVES: " + "▲".repeat(lives); }
+
+        function drawShipSprite(ctxObj, x, y, shipId, alpha = 1, pixelSize = 4) {
+            const s = shipStyles[shipId];
+            ctxObj.globalAlpha = alpha;
+            s.sprite.forEach((row, rI) => row.forEach((px, cI) => {
+                if (px) {
+                    ctxObj.fillStyle = [null, s.main, s.sec, s.cockpit][px];
+                    ctxObj.fillRect(x + (cI * pixelSize), y + (rI * pixelSize), pixelSize, pixelSize);
+                }
+            }));
+            ctxObj.globalAlpha = 1;
+        }
+
+        function drawAlien(x, y, isElite, frame) {
+            ctx.fillStyle = isElite ? "#FF3366" : "#00FF44";
+            const anim = Math.sin(frame * 0.1) * 2;
+            const s = isElite ?
+                [[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,0,0,0,1,1,0,1],[1,0,1,1,1,1,1,1,1,0,1],[1,1,1,0,1,1,1,0,1,1,1],[1,1,1,1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1,1,1,0],[0,0,1,0,0,0,0,0,1,0,0],[0,1,1,0,0,0,0,0,1,1,0]] :
+                [[0,0,1,0,0,0,0,0,1,0,0],[0,0,0,1,0,0,0,1,0,0,0],[0,0,1,1,1,1,1,1,1,0,0],[0,1,1,0,1,1,1,0,1,1,0],[1,1,1,1,1,1,1,1,1,1,1],[1,0,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,1,0,1],[0,0,0,1,1,0,1,1,0,0,0]];
+            const scale = isElite ? 5 : 4;
+            s.forEach((row, rI) => row.forEach((px, cI) => { if (px) ctx.fillRect(x + (cI * scale), y + (rI * scale) + (rI > 5 ? anim : 0), scale, scale); }));
+        }
+
+        function drawBoard(x, y, title, data, color) {
+            ctx.fillStyle = `rgba(${color}, 0.1)`; ctx.fillRect(x, y, 180, 200); ctx.strokeStyle = `rgb(${color})`; ctx.strokeRect(x, y, 180, 200);
+            ctx.fillStyle = `rgb(${color})`; ctx.font = "bold 14px Courier New"; ctx.textAlign = "center"; ctx.fillText(title, x + 90, y + 25);
+           
+            data.forEach((entry, i) => {
+                const rowY = y + 55 + (i * 30);
+                ctx.textAlign = "left"; ctx.fillStyle = "white"; ctx.font = "bold 11px Courier New";
+                ctx.fillText(`${i+1}.${entry.name}`, x + 10, rowY);
+               
+                const miniScale = 1.5;
+                drawShipSprite(ctx, x + 85, rowY - 10, entry.shipId || 0, 1, miniScale);
+
+                ctx.textAlign = "right"; ctx.fillStyle = `rgb(${color})`; ctx.font = "bold 12px Courier New";
+                ctx.fillText(entry.score, x + 170, rowY);
+            });
+            ctx.textAlign = "center";
+        }
+
+        function update() {
+            if (isPaused || gameState !== "PLAYING") return;
+            stars.forEach(s => { s.y += 0.5; if(s.y > canvas.height) s.y = 0; });
+            frameCount++; if (shake > 0) shake--;
+           
+            const currentShip = shipStyles[shipType];
+            if (keys["ArrowLeft"] && player.x > 0) player.x -= currentShip.speed;
+            if (keys["ArrowRight"] && player.x < canvas.width - player.w) player.x += currentShip.speed;
+           
+            if (currentShip.name === "ELITE GOLD") { trails.push({ x: player.x, y: player.y, life: 1 }); }
+            trails.forEach((t, i) => { t.life -= 0.1; if (t.life <= 0) trails.splice(i, 1); });
+
+            const now = Date.now();
+            if (keys["Space"] && now - lastShotTime > currentShip.fireDelay) {
+                lastShotTime = now;
+                if (currentShip.name === "VOID WALKER") { bullets.push({ x: player.x + 22, y: player.y, isSonic: true, w: 10, hitIds: [] }); playSfx(100, "triangle", 0.4, 0.2); shake = 5; }
+                else if (currentShip.name === "CHROMATIC DRAGON") { bullets.push({ x: player.x+22, y: player.y, vx: 0, vy: -8 },{ x: player.x+22, y: player.y, vx: -2, vy: -7.5 },{ x: player.x+22, y: player.y, vx: 2, vy: -7.5 }); playSfx(880, "sawtooth", 0.05, 0.05); }
+                else if (currentShip.name === "ATOMIC STAR") { bullets.push({ x: player.x + 22, y: player.y, vx: 0, vy: -6, explosive: true, r: 8 }); playSfx(200, "sawtooth", 0.1, 0.1); }
+                else { bullets.push({ x: player.x + 22, y: player.y, vx: 0, vy: -8 }); playSfx(880, "sawtooth", 0.05, 0.05); }
+            }
+
+            bullets.forEach((b, i) => {
+                b.y += (b.vy || -8); b.x += (b.vx || 0);
+                if (b.isSonic) { b.w += 2.5; if (frameCount % 3 === 0) ghosts.push({x: b.x, y: b.y, w: b.w, life: 1}); }
+                if (b.y < -50) bullets.splice(i, 1);
+            });
+
+            alienBullets.forEach((ab, i) => {
+                ab.y += 4;
+                if (ab.y > canvas.height) alienBullets.splice(i, 1);
+                if (ab.x > player.x && ab.x < player.x + player.w && ab.y > player.y && ab.y < player.y + player.h) {
+                    alienBullets.splice(i, 1);
+                    lives--; updateLivesUI(); if (lives <= 0) die();
+                    playSfx(50, "sawtooth", 0.3, 0.2);
+                    shake = 10;
+                }
+            });
+
+            ghosts.forEach((g, i) => { g.life -= 0.05; if (g.life <= 0) ghosts.splice(i, 1); });
+
+            if (Math.random() < 0.025) {
+                // NEW LOGIC: After 2000 score, 50% chance of being elite
+                let eliteChance = (score >= 2000) ? 0.5 : (score >= 1000 ? 0.15 : 0);
+                let isElite = Math.random() < eliteChance;
+                aliens.push({ x: Math.random() * 540, y: -50, w: isElite?55:44, h: isElite?40:32, hp: isElite?2:1, isElite, id: Math.random(), offset: Math.floor(Math.random()*60) });
+            }
+
+            aliens.forEach((a, ai) => {
+                a.y += baseAlienSpeed;
+               
+                // Elite Shooting (1 shot per second, staggered so they don't all fire at once)
+                if (a.isElite && (frameCount + a.offset) % 60 === 0) {
+                    alienBullets.push({ x: a.x + a.w/2, y: a.y + a.h });
+                    playSfx(300, "square", 0.1, 0.05);
+                }
+
+                if (a.y > canvas.height) { lives--; updateLivesUI(); if (lives <= 0) die(); aliens.splice(ai, 1); }
+                bullets.forEach((b, bi) => {
+                    let hit = false;
+                    if (b.isSonic) { if (Math.abs(b.x - (a.x + a.w/2)) < b.w/2 && Math.abs(b.y - a.y) < 20 && !b.hitIds.includes(a.id)) { hit = true; b.hitIds.push(a.id); } }
+                    else { if (b.x > a.x && b.x < a.x + a.w && b.y > a.y && b.y < a.y + a.h) hit = true; }
+                   
+                    if (hit) {
+                        a.hp--;
+                        if (b.explosive) {
+                            explosions.push({ x: b.x, y: b.y, r: 5, life: 1 });
+                            aliens.forEach(al => { if (Math.sqrt((al.x-b.x)**2 + (al.y-b.y)**2) < 80) al.hp = 0; });
+                        }
+                        if (!b.isSonic) bullets.splice(bi, 1);
+                    }
+                });
+                if (a.hp <= 0) { score += a.isElite ? 50 : 10; scoreDisplay.innerText = score; aliens.splice(ai, 1); playSfx(150, "square", 0.1, 0.1); }
+            });
+
+            explosions.forEach((e, i) => { e.r += 4; e.life -= 0.04; if (e.life <= 0) explosions.splice(i, 1); });
+        }
+
+        function die() {
+            updateLeaderboards(score);
+            if (score > (profiles[currentUsername]?.highScore || 0) && !cheatsEnabled) { profiles[currentUsername].highScore = score; localStorage.setItem("invaderProfiles", JSON.stringify(profiles)); realHighScore = score; }
+            gameState = "GAMEOVER";
+            pauseBtn.style.display = "none";
+        }
+
+        function draw() {
+            ctx.save();
+            if (gameState === "PLAYING" && shake > 0 && !isPaused) ctx.translate(Math.random()*shake - shake/2, Math.random()*shake - shake/2);
+            ctx.fillStyle = "black"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "white"; stars.forEach(s => ctx.fillRect(s.x, s.y, s.s, s.s));
+           
+            if (gameState === "PLAYING") {
+                ghosts.forEach(g => { ctx.strokeStyle = `rgba(255, 255, 255, ${g.life * 0.3})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(g.x, g.y, g.w, Math.PI, Math.PI * 2); ctx.stroke(); });
+                trails.forEach(t => drawShipSprite(ctx, t.x, t.y, shipType, t.life * 0.4));
+                const s = shipStyles[shipType];
+                if (!isPaused) { ctx.fillStyle = s.flame; ctx.fillRect(player.x + 18, player.y + 30, 8, 8 + Math.random()*12); }
+                drawShipSprite(ctx, player.x, player.y, shipType);
+               
+                bullets.forEach(b => {
+                    if (b.isSonic) { ctx.strokeStyle = "white"; ctx.beginPath(); ctx.arc(b.x, b.y, b.w, Math.PI, Math.PI * 2); ctx.stroke(); }
+                    else if (b.explosive) { ctx.fillStyle = "#A020F0"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill(); }
+                    else { ctx.fillStyle = "yellow"; ctx.fillRect(b.x-2, b.y, 4, 12); }
+                });
+
+                alienBullets.forEach(ab => {
+                    ctx.fillStyle = "#FF3366";
+                    ctx.fillRect(ab.x-2, ab.y, 4, 10);
+                    ctx.shadowBlur = 10; ctx.shadowColor = "#FF3366";
+                    ctx.fillRect(ab.x-1, ab.y, 2, 8);
+                    ctx.shadowBlur = 0;
+                });
+
+                aliens.forEach(a => drawAlien(a.x, a.y, a.isElite, frameCount));
+                explosions.forEach(e => { ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI*2); ctx.strokeStyle = `rgba(142, 68, 173, ${e.life})`; ctx.lineWidth = 4; ctx.stroke(); });
+
+                if (isPaused) {
+                    ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0,0,600,500);
+                    ctx.fillStyle = "#00ffcc"; ctx.font = "bold 42px Courier New"; ctx.textAlign = "center";
+                    ctx.fillText("PAUSED", 300, 220);
+                    ctx.strokeStyle = "#ff3366"; ctx.strokeRect(220, 280, 160, 40);
+                    ctx.fillStyle = "#ff3366"; ctx.font = "bold 18px Courier New";
+                    ctx.fillText("QUIT MISSION", 300, 307);
+                }
+            } else if (gameState === "MENU") {
+                ctx.textAlign = "center"; ctx.font = "900 42px Courier New"; ctx.fillStyle = "#00FF44"; ctx.fillText("SPACE INVADERS", 300, 70);
+                drawBoard(10, 110, "TOP PILOTS", globalBoard, "0, 255, 204"); drawBoard(410, 110, "DEV SCORES", cheatBoard, "255, 51, 102");
+                ctx.fillStyle = "#00FFCC"; ctx.font = "bold 14px Courier New"; ctx.fillText(currentUsername, 300, 225);
+                const s = shipStyles[shipType]; const locked = s.req > realHighScore && !cheatsEnabled;
+                drawShipSprite(ctx, 278, 240, shipType, locked ? 0.2 : 1);
+                ctx.fillStyle = locked ? "#FF3366" : "white"; ctx.font = "bold 16px Courier New"; ctx.fillText(locked ? "LOCKED: " + s.req : "< " + s.name + " >", 300, 310);
+                ctx.strokeStyle = "#00FFCC"; ctx.strokeRect(130, 340, 150, 40); ctx.fillStyle = "#00FFCC"; ctx.fillText("LOGIN", 205, 365);
+                ctx.strokeStyle = "#FF3366"; ctx.strokeRect(320, 340, 150, 40); ctx.fillStyle = "#FF3366"; ctx.fillText("CHEATS", 395, 365);
+                ctx.strokeStyle = locked ? "#444" : "#00FF44"; ctx.strokeRect(220, 400, 160, 55); ctx.fillStyle = locked ? "#444" : "#00FF44"; ctx.font = "900 24px Courier New"; ctx.fillText("PLAY", 300, 435);
+            } else if (gameState === "GAMEOVER") {
+                ctx.textAlign = "center"; ctx.fillStyle = "#ff3366"; ctx.font = "bold 42px Courier New"; ctx.fillText("GAME OVER", 300, 80);
+                ctx.fillStyle = "white"; ctx.font = "bold 24px Courier New"; ctx.fillText("FINAL SCORE: " + score, 300, 130);
+                drawBoard(10, 160, "TOP PILOTS", globalBoard, "0, 255, 204"); drawBoard(410, 160, "DEV SCORES", cheatBoard, "255, 51, 102");
+                ctx.fillStyle = "#00FF44"; ctx.font = "bold 24px Arial"; ctx.fillText("RETRY", 300, 405); ctx.fillStyle = "#54A0FF"; ctx.font = "bold 20px Arial"; ctx.fillText("BACK TO MENU", 300, 455);
+            }
+            ctx.restore(); update(); requestAnimationFrame(draw);
+        }
+        draw();
+    </script>
+</body>
+</html>

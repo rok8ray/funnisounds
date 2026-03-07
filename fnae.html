@@ -22,7 +22,7 @@
         #loading-text { color: #555; font-size: 1.5em; margin-top: 20px; }
 
         /* Fixed UI Overlay */
-        #ui { 
+        #ui-layer { 
             position: absolute; 
             width: 100%; 
             height: 100%; 
@@ -49,6 +49,15 @@
             left: 40px;
         }
 
+        /* Debug UI */
+        #debug-indicator {
+            position: absolute;
+            top: 60px;
+            left: 40px;
+            color: #ff0;
+            display: none;
+        }
+
         #static-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none; z-index: 100;
@@ -65,17 +74,18 @@
 <body>
 
     <div id="menu">
-        <h1>FIVE NIGHTS AT THE TEMPLE</h1>
+        <h1>FIVE NIGHTS AT...Einstein's...yeahhh</h1>
         <div id="loading-text">Loading model...</div>
-        <button id="start-btn">START GAME</button>
+        <button id="start-btn">START GOON</button>
     </div>
 
     <div id="static-overlay"></div>
     <div id="screen-msg"></div>
     
-    <div id="ui">
+    <div id="ui-layer">
         <div class="stats" id="power-display">POWER: 100%</div>
         <div class="stats" id="clock">12 AM</div>
+        <div class="stats" id="debug-indicator">DEBUG MODE: ON</div>
     </div>
 
     <script type="importmap">
@@ -91,13 +101,14 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+        // Global UI variable for console adjustment
+        window.ui = { x: -1, y: 3, z: 3 };
+
         const loader = new GLTFLoader();
         loader.load(
           'https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/3dmodels/temple.glb',
           (gltf) => {
-            // ATTACH TO WINDOW SO CONSOLE CAN SEE IT
             window.loadedModel = gltf.scene; 
-            
             document.getElementById('loading-text').style.display = 'none';
             document.getElementById('start-btn').style.display = 'block';
           }
@@ -105,7 +116,7 @@
 
         function startGame() {
             document.getElementById('menu').style.display = 'none';
-            document.getElementById('ui').style.display = 'block';
+            document.getElementById('ui-layer').style.display = 'block';
 
             const scene = new THREE.Scene();
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -116,24 +127,26 @@
             document.body.appendChild(renderer.domElement);
 
             if (window.loadedModel) {
-                window.loadedModel.position.set(0,0,0);
+                // Initialize with global ui values
+                window.loadedModel.position.set(window.ui.x, window.ui.y, window.ui.z);
+                window.loadedModel.scale.set(10,10,10);
                 scene.add(window.loadedModel);
             }
             
             const leftDoor = new THREE.Mesh(new THREE.BoxGeometry(1, 15, 8), new THREE.MeshStandardMaterial({ color: 0x222222 }));
-            leftDoor.position.set(-8.4, 15, -1); 
+            leftDoor.position.set(-8.9, 15, -1); 
             scene.add(leftDoor);
 
             const enemy = new THREE.Mesh(
                 new THREE.SphereGeometry(1.5), 
                 new THREE.MeshStandardMaterial({color: 0xff0000, roughness: 0.8}) 
             );
-            enemy.position.set(-12, -2, -15); 
+            enemy.position.set(-12.5, -2, -14); 
             scene.add(enemy);
 
             const createBtn = (y, type, color) => {
                 const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 1), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 }));
-                b.position.set(-8, y, 4); b.userData = { type };
+                b.position.set(-7.5, y, 4); b.userData = { type };
                 scene.add(b);
             };
             createBtn(1, "doorL", 0xff0000);   
@@ -141,14 +154,23 @@
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.5));
             const hallwayL = new THREE.PointLight(0xffffff, 0, 50);
-            hallwayL.position.set(-10, 2, -1); 
+            hallwayL.position.set(-10.5, 2, 0); 
             scene.add(hallwayL);
 
             let mouseX = 0, power = 100, leftOpen = true, isGameOver = false, hour = 0, time = 0;
             let enemyActive = false;
-            let targetZ = -15;
+            let targetZ = -15.5; 
+            let debugMode = false;
 
             window.addEventListener('mousemove', (e) => mouseX = (e.clientX / window.innerWidth) * 2 - 1);
+            
+            window.addEventListener('keydown', (e) => {
+                if (e.key.toLowerCase() === 'd') {
+                    debugMode = !debugMode;
+                    document.getElementById('debug-indicator').style.display = debugMode ? 'block' : 'none';
+                }
+            });
+
             window.addEventListener('mousedown', (e) => {
                 const mouse = new THREE.Vector2((e.clientX/innerWidth)*2-1, -(e.clientY/innerHeight)*2+1);
                 const raycaster = new THREE.Raycaster();
@@ -171,6 +193,13 @@
                 if (isGameOver) return;
                 requestAnimationFrame(animate);
 
+                // Live Update Model Position from UI Variable
+                if (window.loadedModel) {
+                    window.loadedModel.position.x = window.ui.x;
+                    window.loadedModel.position.y = window.ui.y;
+                    window.loadedModel.position.z = window.ui.z;
+                }
+
                 camera.rotation.y += (-mouseX * 1.5 - camera.rotation.y) * 0.05;
                 leftDoor.position.y = THREE.MathUtils.lerp(leftDoor.position.y, leftOpen ? 15 : 0, 0.1);
 
@@ -180,26 +209,28 @@
                     if(hour === 6) endGame("6 AM<br>YOU WIN", "blue");
                 }
 
-                power -= (0.005 + (!leftOpen ? 0.08 : 0) + (hallwayL.intensity ? 0.04 : 0));
+                if (!debugMode) {
+                    power -= (0.005 + (!leftOpen ? 0.08 : 0) + (hallwayL.intensity ? 0.04 : 0));
+                }
+                
                 document.getElementById('power-display').innerText = `POWER: ${Math.max(0, Math.floor(power))}%`;
-                if (power <= 0) endGame("POWER OUTAGE", "black");
+                
+                if (power <= 0 && !debugMode) endGame("POWER OUTAGE", "black");
 
                 if (Math.random() > 0.998 && !enemyActive) {
                     enemyActive = true;
-                    targetZ = -1;
+                    targetZ = -1; 
                 }
 
                 enemy.position.z = THREE.MathUtils.lerp(enemy.position.z, targetZ, 0.02);
 
-                if (enemyActive && enemy.position.z > -2 && leftOpen && Math.random() > 0.99) {
-                    endGame("GAME OVER", "red");
+                if (enemyActive && enemy.position.z > -2.5 && leftOpen && Math.random() > 0.99) {
+                    if (!debugMode) endGame("GAME OVER", "red");
                 }
 
-                if (!leftOpen && enemyActive && enemy.position.z > -3) {
-                    targetZ = -15;
-                    if (enemy.position.z < -14) {
-                        enemyActive = false;
-                    }
+                if (!leftOpen && enemyActive && enemy.position.z > -3.5) {
+                    targetZ = -14;
+                    if (enemy.position.z < -14.5) enemyActive = false;
                 }
 
                 renderer.render(scene, camera);
