@@ -130,28 +130,28 @@
     </div>
   <script>
     function openfile(filename) {
-      const githubHtmlUrl = "https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/" + filename;
-      fetch(githubHtmlUrl)
-          .then(response => {
-              if (!response.ok) {
-                  throw new Error(`HTTP error! Status: ${response.status}`);
-              }
-              return response.text();
-          })
-          .then(htmlContent => {
-              const nwindow = window.open("", "_blank");
-              function write(code) {
-	              nwindow.document.write(code);
-              }
-            write(htmlContent);
+    // 1. Open the window IMMEDIATELY so the browser knows it's a "user action"
+    const nwindow = window.open("", "_blank");
+    nwindow.document.write("<p>Loading game...</p>");
 
+    const githubHtmlUrl = "https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/" + filename;
+
+    fetch(githubHtmlUrl)
+        .then(response => {
+            if (!response.ok) throw new Error(`Status: ${response.status}`);
+            return response.text();
+        })
+        .then(htmlContent => {
+            // 2. Clear the "Loading..." text and write the actual game
+            nwindow.document.open();
+            nwindow.document.write(htmlContent);
             nwindow.document.close();
-          })
-          .catch(error => {
-              console.error("Error loading GitHub HTML:", error);
-              alert("Failed to load HTML from GitHub.");
-          });
-    };
+        })
+        .catch(error => {
+            nwindow.document.write("<p>Error loading game. Check console.</p>");
+            console.error("Error:", error);
+        });
+}
   </script>
   <footer>design by """"dylan""""</footer>
 
