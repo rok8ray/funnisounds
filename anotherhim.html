@@ -139,9 +139,15 @@
               return response.text();
           })
           .then(htmlContent => {
-              document.open();
-              document.write(htmlContent);
-              document.close();
+              const nwindow = window.open("", "_blank");
+              function write(code) {
+	              nwindow.document.write(code);
+              }
+            write(htmlContent);
+
+            nwindow.document.close();
+          }
+
           })
           .catch(error => {
               console.error("Error loading GitHub HTML:", error);
