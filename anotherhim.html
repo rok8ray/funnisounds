@@ -132,7 +132,7 @@
     function openfile(filename) {
       const githubHtmlUrl = "https://raw.githubusercontent.com/rok8ray/funnisounds/refs/heads/main/" + filename;
       fetch(githubHtmlUrl)
-    .      then(response => {
+          .then(response => {
               if (!response.ok) {
                   throw new Error(`HTTP error! Status: ${response.status}`);
               }
